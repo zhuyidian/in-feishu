@@ -1,0 +1,151 @@
+package control
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
+)
+
+func withBuildFlavorForControlTest(t *testing.T, flavor buildinfo.Flavor) {
+	t.Helper()
+	previous := buildinfo.FlavorValue
+	buildinfo.FlavorValue = string(flavor)
+	t.Cleanup(func() {
+		buildinfo.FlavorValue = previous
+	})
+}
+
+func TestUpgradeDefinitionRespectsShippingPolicy(t *testing.T) {
+	withBuildFlavorForControlTest(t, buildinfo.FlavorShipping)
+
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandUpgrade)
+	if !ok {
+		t.Fatal("expected upgrade definition")
+	}
+	if strings.Contains(strings.Join(def.Examples, " "), "/upgrade local") {
+		t.Fatalf("shipping upgrade examples should hide local upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(strings.Join(def.Examples, " "), "/upgrade dev") {
+		t.Fatalf("shipping upgrade examples should hide dev upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(strings.Join(def.Examples, " "), "/upgrade track alpha") {
+		t.Fatalf("shipping upgrade examples should hide alpha track: %#v", def.Examples)
+	}
+	if strings.Contains(def.ArgumentFormNote, "local") || strings.Contains(def.ArgumentFormNote, "dev") {
+		t.Fatalf("shipping upgrade form note should hide local upgrade: %q", def.ArgumentFormNote)
+	}
+	for _, option := range def.Options {
+		if option.CommandText == "/upgrade local" || option.CommandText == "/upgrade dev" || option.CommandText == "/upgrade track alpha" {
+			t.Fatalf("shipping upgrade options should hide restricted commands: %#v", def.Options)
+		}
+	}
+}
+
+func TestUpgradeDefinitionRespectsAlphaPolicy(t *testing.T) {
+	withBuildFlavorForControlTest(t, buildinfo.FlavorAlpha)
+
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandUpgrade)
+	if !ok {
+		t.Fatal("expected upgrade definition")
+	}
+	if !strings.Contains(strings.Join(def.Examples, " "), "/upgrade dev") {
+		t.Fatalf("alpha upgrade examples should include dev upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(strings.Join(def.Examples, " "), "/upgrade local") {
+		t.Fatalf("alpha upgrade examples should hide local upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(def.ArgumentFormNote, "local") {
+		t.Fatalf("alpha upgrade form note should hide local upgrade: %q", def.ArgumentFormNote)
+	}
+	foundDev := false
+	foundAlphaTrack := false
+	for _, option := range def.Options {
+		switch option.CommandText {
+		case "/upgrade dev":
+			foundDev = true
+		case "/upgrade local":
+			t.Fatalf("alpha upgrade options should hide local upgrade: %#v", def.Options)
+		case "/upgrade track alpha":
+			foundAlphaTrack = true
+		}
+	}
+	if !foundDev || !foundAlphaTrack {
+		t.Fatalf("alpha upgrade options missing expected entries: %#v", def.Options)
+	}
+}
+
+func TestHelpCatalogReflectsShippingUpgradePolicy(t *testing.T) {
+	withBuildFlavorForControlTest(t, buildinfo.FlavorShipping)
+
+	catalog := FeishuCommandHelpPageView()
+	for _, section := range catalog.Sections {
+		for _, entry := range section.Entries {
+			if entry.Title != "升级系统" {
+				continue
+			}
+			if strings.Contains(strings.Join(entry.Examples, " "), "/upgrade local") {
+				t.Fatalf("shipping help catalog should hide local upgrade example: %#v", entry)
+			}
+			if strings.Contains(strings.Join(entry.Examples, " "), "/upgrade dev") {
+				t.Fatalf("shipping help catalog should hide dev upgrade example: %#v", entry)
+			}
+			if strings.Contains(strings.Join(entry.Examples, " "), "/upgrade track alpha") {
+				t.Fatalf("shipping help catalog should hide alpha track example: %#v", entry)
+			}
+			return
+		}
+	}
+	t.Fatal("expected upgrade entry in help catalog")
+}
+
+func TestVSCodeMigrateDisplayRespectsProductMode(t *testing.T) {
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandVSCodeMigrate)
+	if !ok {
+		t.Fatal("expected vscode migrate definition")
+	}
+
+	normalDetached := CatalogContext{ProductMode: "normal"}
+	normalWorking := CatalogContext{ProductMode: "normal", MenuStage: string(FeishuCommandMenuStageNormalWorking)}
+	vscodeDetached := CatalogContext{ProductMode: "vscode"}
+
+	if _, ok := FeishuCommandDefinitionForDisplayContext(def, false, normalDetached); ok {
+		t.Fatalf("expected /vscode-migrate to stay hidden from normal help")
+	}
+	if _, ok := FeishuCommandDefinitionForDisplayContext(def, true, normalWorking); ok {
+		t.Fatalf("expected /vscode-migrate to stay hidden from normal menu")
+	}
+	if projected, ok := FeishuCommandDefinitionForDisplayContext(def, false, vscodeDetached); !ok {
+		t.Fatalf("expected /vscode-migrate to stay visible in vscode help")
+	} else if projected.CanonicalSlash != "/vscode-migrate" {
+		t.Fatalf("unexpected vscode migrate display projection: %#v", projected)
+	}
+
+	normalHelp := BuildFeishuCommandDisplayPageViewForContext("命令帮助", "", false, normalDetached)
+	if catalogContainsCommand(normalHelp, "/vscode-migrate") {
+		t.Fatalf("expected normal help catalog to hide /vscode-migrate: %#v", normalHelp)
+	}
+
+	vscodeHelp := BuildFeishuCommandDisplayPageViewForContext("命令帮助", "", false, vscodeDetached)
+	if !catalogContainsCommand(vscodeHelp, "/vscode-migrate") {
+		t.Fatalf("expected vscode help catalog to include /vscode-migrate: %#v", vscodeHelp)
+	}
+
+	normalMenu := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupMaintenance, normalWorking)
+	if catalogContainsCommand(normalMenu, "/vscode-migrate") {
+		t.Fatalf("expected normal maintenance menu to hide /vscode-migrate: %#v", normalMenu)
+	}
+}
+
+func catalogContainsCommand(catalog FeishuPageView, command string) bool {
+	for _, section := range catalog.Sections {
+		for _, entry := range section.Entries {
+			for _, current := range entry.Commands {
+				if current == command {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

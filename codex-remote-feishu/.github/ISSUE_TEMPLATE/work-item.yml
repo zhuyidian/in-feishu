@@ -1,0 +1,90 @@
+name: Issue
+description: 人用的轻量问题 / 需求入口；先把问题、目标和证据说清，执行结构后续再补
+labels:
+  - status:needs-investigation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是原始需求入口，不要求你一开始就把范围、实现方案、验证计划都想清楚。
+
+        先把下面几项写清就够了：
+        - 你遇到了什么问题，或者你想要什么能力
+        - 你希望最后变成什么样
+        - 你手上已经有的证据、限制或担心点
+
+        后续如果进入正式 workflow，会再补 `建议范围`、`实现参考`、`检查参考`、`收尾参考` 等执行字段，并按情况把状态从 `status:needs-investigation` 推进到 `status:needs-plan` / `status:implementable-now`。
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: 类型
+      description: 选一个最接近的就行，不用纠结是否绝对准确
+      options:
+        - bug
+        - feature
+        - refactor
+        - docs
+        - research
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_or_request
+    attributes:
+      label: 你遇到的问题 / 你想做什么
+      description: 用自然语言描述就可以，不要求先写成执行工单
+      placeholder: |
+        例如：
+        - 某个 slash command help 里有乱码
+        - 想把某条长列表卡片改成分页
+        - 当前升级链路在 Windows 下可能有文件占用问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: 你希望最后变成什么样
+      description: 从用户视角或结果视角描述即可，不要求先写成严格验收条款
+      placeholder: |
+        例如：
+        - 用户看到的 help 文案不再出现乱码
+        - list / use 这类长卡片可以翻页，默认体验更清爽
+        - 升级失败时可以稳定回滚，不会把当前安装打坏
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 相关证据
+      description: 可填复现步骤、日志、截图、链接、相关 issue / commit；没有可以留空
+      placeholder: |
+        例如：
+        - 复现步骤
+        - 报错日志
+        - 截图
+        - 相关 issue / PR / 设计文档链接
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 已知约束 / 担心点
+      description: 如果你已经知道哪些东西不能动、哪些风险要特别注意，写在这里；没有可以留空
+      placeholder: |
+        例如：
+        - 不希望改用户可见行为
+        - Linux only
+        - 先不要动 VS Code 路径
+        - 可能和另一个 issue 有关系
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充说明
+      description: 其他上下文、假设、想法或临时备注；没有可以留空
+      placeholder: |
+        例如：
+        - 这件事现在只是先记一下，之后再细化
+        - 如果调研发现量太大，可以拆子 issue

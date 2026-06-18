@@ -1,0 +1,501 @@
+package daemon
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
+
+const (
+	vscodeCompatibilityRetryBackoff = 30 * time.Second
+
+	vscodeCompatibilityIssueLegacyEditorSettings      = "legacy_editor_settings"
+	vscodeCompatibilityIssueLegacyEditorSettingsRetry = "legacy_editor_settings_retry"
+	vscodeCompatibilityIssueManagedShimReinstall      = "managed_shim_reinstall"
+)
+
+type vscodeCompatibilityIssue struct {
+	Key         string
+	Title       string
+	Summary     string
+	ActionText  string
+	ButtonLabel string
+	SuccessText string
+}
+
+type vscodeCompatibilityPromptTarget struct {
+	SurfaceSessionID string
+	GatewayID        string
+}
+
+func classifyVSCodeCompatibilityIssue(detect vscodeDetectResponse) *vscodeCompatibilityIssue {
+	hasTarget := vscodeHasMigrationTarget(detect)
+	legacySettings := strings.EqualFold(strings.TrimSpace(detect.CurrentMode), "editor_settings") || detect.Settings.MatchesBinary
+	if legacySettings {
+		issue := &vscodeCompatibilityIssue{
+			Key:         vscodeCompatibilityIssueLegacyEditorSettings,
+			Title:       "VS Code 接入需要迁移",
+			Summary:     "检测到这台机器仍在使用旧版 settings.json 覆盖。它会把 host 侧 override 带进 Remote SSH，会继续干扰远端 VS Code 会话。新版本已经统一收敛到扩展入口 managed shim。",
+			SuccessText: "已迁移到扩展入口 managed shim。请重新打开 VS Code 开始使用。",
+		}
+		if hasTarget {
+			issue.ActionText = "确认这台机器上的 VS Code 已关闭后，再点击下方按钮执行迁移。完成后请重新打开 VS Code。"
+			issue.ButtonLabel = "迁移并重新接入"
+		} else {
+			issue.ActionText = "当前还没检测到可接管的 VS Code 扩展入口。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装，然后再回来迁移。"
+		}
+		return issue
+	}
+	if detect.NeedsShimReinstall {
+		issue := &vscodeCompatibilityIssue{
+			Key:         vscodeCompatibilityIssueManagedShimReinstall,
+			Title:       "VS Code 接入需要修复",
+			Summary:     "检测到当前 managed shim 已失效，常见原因是 VS Code 扩展升级后入口发生了变化。需要重新接管最新扩展入口后，vscode mode 才能继续稳定使用。",
+			SuccessText: "已重新接管最新 VS Code 扩展入口。请重新打开 VS Code 开始使用。",
+		}
+		if hasTarget {
+			issue.ActionText = "确认这台机器上的 VS Code 已关闭后，再点击下方按钮重新接入最新扩展入口。完成后请重新打开 VS Code。"
+			issue.ButtonLabel = "重新接入扩展入口"
+		} else {
+			issue.ActionText = "当前还没检测到可接管的 VS Code 扩展入口。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装，然后再回来修复。"
+		}
+		return issue
+	}
+	return nil
+}
+
+func vscodeHasMigrationTarget(detect vscodeDetectResponse) bool {
+	return strings.TrimSpace(detect.LatestBundleEntrypoint) != "" || strings.TrimSpace(detect.RecordedBundleEntrypoint) != ""
+}
+
+func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, error) {
+	detect, err := a.detectVSCodeCompatibility()
+	if err != nil {
+		return nil, err
+	}
+	return classifyVSCodeCompatibilityIssue(detect), nil
+}
+
+func (a *App) surfaceRunsVSCodeModeLocked(surfaceID string) bool {
+	snapshot := a.service.SurfaceSnapshot(strings.TrimSpace(surfaceID))
+	if snapshot == nil {
+		return false
+	}
+	return state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) == state.ProductModeVSCode
+}
+
+func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]eventcontract.Event, bool) {
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC(), false, "")
+}
+
+func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time) ([]eventcontract.Event, bool) {
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, now, false, "")
+}
+
+func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time, forceSync bool, inlineSourceMessageID string) ([]eventcontract.Event, bool) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	targets := a.detachedVSCodeCompatibilityTargetsLocked(surfaceFilter)
+	if len(targets) == 0 {
+		return nil, false
+	}
+	issue, pending := a.cachedVSCodeCompatibilityIssueLocked(now)
+	if pending && forceSync {
+		issue, pending = a.resolveVSCodeCompatibilityIssueSynchronouslyLocked(now)
+	}
+	if pending {
+		return nil, true
+	}
+	if issue == nil {
+		for _, target := range targets {
+			if flow := a.activeVSCodeMigrationFlowLocked(target.SurfaceSessionID); flow != nil {
+				a.refreshVSCodeMigrationFlowLocked(flow, "")
+			}
+		}
+		return nil, false
+	}
+	if vscodeIssueAllowsSilentAutoMigration(issue) {
+		return a.handleSilentVSCodeAutoMigrationLocked(targets, surfaceFilter, inlineSourceMessageID)
+	}
+	return a.vscodeCompatibilityPromptEventsLocked(targets, surfaceFilter, inlineSourceMessageID, *issue), true
+}
+
+func vscodeIssueAllowsSilentAutoMigration(issue *vscodeCompatibilityIssue) bool {
+	return issue != nil &&
+		strings.TrimSpace(issue.Key) == vscodeCompatibilityIssueLegacyEditorSettings &&
+		strings.TrimSpace(issue.ButtonLabel) != ""
+}
+
+func vscodeLegacyAutoMigrationRetryIssue(message string) *vscodeCompatibilityIssue {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "已自动尝试迁移到 managed shim，但这次没有成功。请确认 VS Code 已关闭后重试；如仍异常，也可以重新发送 `/vscode-migrate`。"
+	}
+	return &vscodeCompatibilityIssue{
+		Key:         vscodeCompatibilityIssueLegacyEditorSettingsRetry,
+		Title:       "VS Code 接入迁移失败",
+		Summary:     "已自动尝试把旧版 settings.json 覆盖迁到 managed shim，但这次没有成功。",
+		ActionText:  message,
+		ButtonLabel: "重试迁移并重新接入",
+		SuccessText: "已迁移到扩展入口 managed shim。请重新打开 VS Code 开始使用。",
+	}
+}
+
+func (a *App) setCachedVSCodeCompatibilityIssueLocked(issue *vscodeCompatibilityIssue) {
+	a.vscodeCompatibility.Checked = true
+	a.vscodeCompatibility.Issue = issue
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+}
+
+func (a *App) vscodeCompatibilityPromptEventsLocked(targets []vscodeCompatibilityPromptTarget, surfaceFilter, inlineSourceMessageID string, issue vscodeCompatibilityIssue) []eventcontract.Event {
+	events := make([]eventcontract.Event, 0, len(targets))
+	for _, target := range targets {
+		inlineReplace := strings.TrimSpace(surfaceFilter) != "" &&
+			strings.TrimSpace(target.SurfaceSessionID) == strings.TrimSpace(surfaceFilter) &&
+			strings.TrimSpace(inlineSourceMessageID) != ""
+		flow := a.activeVSCodeMigrationFlowLocked(target.SurfaceSessionID)
+		if flow != nil && strings.TrimSpace(flow.IssueKey) == strings.TrimSpace(issue.Key) {
+			continue
+		}
+		if flow == nil {
+			messageID := ""
+			if inlineReplace {
+				messageID = inlineSourceMessageID
+			}
+			flow = a.newVSCodeMigrationFlowLocked(target.SurfaceSessionID, a.service.SurfaceActorUserID(target.SurfaceSessionID), messageID, issue.Key)
+		} else {
+			if inlineReplace {
+				flow.MessageID = strings.TrimSpace(inlineSourceMessageID)
+			}
+			a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
+		}
+		event := vscodeMigrationPromptEvent(target.SurfaceSessionID, flow, inlineReplace, issue)
+		event.GatewayID = target.GatewayID
+		events = append(events, event)
+	}
+	return events
+}
+
+func (a *App) handleSilentVSCodeAutoMigrationLocked(targets []vscodeCompatibilityPromptTarget, surfaceFilter, inlineSourceMessageID string) ([]eventcontract.Event, bool) {
+	a.mu.Unlock()
+	err := a.applyVSCodeIntegration(vscodeApplyRequest{Mode: "managed_shim"})
+	a.mu.Lock()
+	if err != nil {
+		log.Printf("auto-apply vscode managed shim failed: err=%v", err)
+		retryIssue := vscodeLegacyAutoMigrationRetryIssue(
+			fmt.Sprintf(
+				"已自动尝试迁移到 managed shim，但执行失败：%v。请确认 VS Code 已关闭后，再点击下方按钮重试；也可以重新发送 `/vscode-migrate`。",
+				err,
+			),
+		)
+		a.setCachedVSCodeCompatibilityIssueLocked(retryIssue)
+		return a.vscodeCompatibilityPromptEventsLocked(targets, surfaceFilter, inlineSourceMessageID, *retryIssue), true
+	}
+
+	a.invalidateVSCodeCompatibilityCacheLocked()
+
+	a.mu.Unlock()
+	remaining, detectErr := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+	if detectErr != nil {
+		retryIssue := vscodeLegacyAutoMigrationRetryIssue(
+			fmt.Sprintf(
+				"已自动更新扩展入口，但后续状态检查失败：%v。请重新打开 VS Code；如果问题仍在，可点击下方按钮重试。",
+				detectErr,
+			),
+		)
+		a.setCachedVSCodeCompatibilityIssueLocked(retryIssue)
+		return a.vscodeCompatibilityPromptEventsLocked(targets, surfaceFilter, inlineSourceMessageID, *retryIssue), true
+	}
+	if remaining != nil {
+		if vscodeIssueAllowsSilentAutoMigration(remaining) {
+			retryIssue := vscodeLegacyAutoMigrationRetryIssue(
+				"已自动尝试迁移到 managed shim，但检查后仍发现旧版 settings.json 覆盖。请确认 VS Code 已关闭，然后再重试。",
+			)
+			a.setCachedVSCodeCompatibilityIssueLocked(retryIssue)
+			return a.vscodeCompatibilityPromptEventsLocked(targets, surfaceFilter, inlineSourceMessageID, *retryIssue), true
+		}
+		a.setCachedVSCodeCompatibilityIssueLocked(remaining)
+		return a.vscodeCompatibilityPromptEventsLocked(targets, surfaceFilter, inlineSourceMessageID, *remaining), true
+	}
+	return nil, false
+}
+
+func (a *App) resolveVSCodeCompatibilityIssueSynchronouslyLocked(now time.Time) (*vscodeCompatibilityIssue, bool) {
+	if a.vscodeCompatibility.Checked {
+		return a.vscodeCompatibility.Issue, false
+	}
+	a.vscodeCompatibility.RefreshToken++
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.Checked = false
+	a.vscodeCompatibility.Issue = nil
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+
+	a.mu.Unlock()
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+
+	if err != nil {
+		log.Printf("detect vscode compatibility issue failed during stamped prompt: err=%v", err)
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		a.vscodeCompatibility.Checked = false
+		a.vscodeCompatibility.Issue = nil
+		a.vscodeCompatibility.RefreshInFlight = false
+		a.vscodeCompatibility.NextRetryAt = now.Add(vscodeCompatibilityRetryBackoff)
+		return nil, true
+	}
+	a.vscodeCompatibility.Checked = true
+	a.vscodeCompatibility.Issue = issue
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+	return issue, false
+}
+
+func (a *App) detectVSCodeCompatibility() (vscodeDetectResponse, error) {
+	if a.vscodeDetect != nil {
+		return a.vscodeDetect()
+	}
+	return a.buildVSCodeDetectResponse()
+}
+
+func (a *App) cachedVSCodeCompatibilityIssueLocked(now time.Time) (*vscodeCompatibilityIssue, bool) {
+	if a.vscodeCompatibility.Checked {
+		return a.vscodeCompatibility.Issue, false
+	}
+	a.maybeStartVSCodeCompatibilityRefreshLocked(now)
+	return nil, a.vscodeCompatibility.RefreshInFlight
+}
+
+func (a *App) maybeStartVSCodeCompatibilityRefreshLocked(now time.Time) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if a.vscodeCompatibility.Checked || a.vscodeCompatibility.RefreshInFlight {
+		return
+	}
+	if !a.vscodeCompatibility.NextRetryAt.IsZero() && now.Before(a.vscodeCompatibility.NextRetryAt) {
+		return
+	}
+	token := a.vscodeCompatibility.RefreshToken
+	a.vscodeCompatibility.RefreshInFlight = true
+	go a.refreshVSCodeCompatibilityAsync(token, now)
+}
+
+func (a *App) refreshVSCodeCompatibilityAsync(token uint64, startedAt time.Time) {
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.finishVSCodeCompatibilityRefreshLocked(token, startedAt, issue, err)
+}
+
+func (a *App) finishVSCodeCompatibilityRefreshLocked(token uint64, startedAt time.Time, issue *vscodeCompatibilityIssue, err error) {
+	if token != a.vscodeCompatibility.RefreshToken {
+		return
+	}
+	a.vscodeCompatibility.RefreshInFlight = false
+	if err != nil {
+		log.Printf("detect vscode compatibility issue failed: err=%v", err)
+		a.vscodeCompatibility.Checked = false
+		a.vscodeCompatibility.Issue = nil
+		if startedAt.IsZero() {
+			startedAt = time.Now().UTC()
+		}
+		a.vscodeCompatibility.NextRetryAt = startedAt.Add(vscodeCompatibilityRetryBackoff)
+		return
+	}
+	a.vscodeCompatibility.Checked = true
+	a.vscodeCompatibility.Issue = issue
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+	if a.shuttingDown {
+		return
+	}
+	now := time.Now().UTC()
+	promptEvents, blocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
+	a.handleUIEventsLocked(context.Background(), promptEvents)
+	if blocked {
+		return
+	}
+	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
+	vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
+	a.handleUIEventsLocked(context.Background(), vscodeRecoveryEvents)
+}
+
+func (a *App) invalidateVSCodeCompatibilityCacheLocked() {
+	a.vscodeCompatibility.Checked = false
+	a.vscodeCompatibility.Issue = nil
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+	a.vscodeCompatibility.RefreshToken++
+}
+
+func (a *App) detachedVSCodeCompatibilityTargetsLocked(surfaceFilter string) []vscodeCompatibilityPromptTarget {
+	surfaceFilter = strings.TrimSpace(surfaceFilter)
+	targets := []vscodeCompatibilityPromptTarget{}
+	for _, surface := range a.service.Surfaces() {
+		if surface == nil {
+			continue
+		}
+		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
+		if surfaceFilter != "" && surfaceID != surfaceFilter {
+			continue
+		}
+		if state.NormalizeProductMode(surface.ProductMode) != state.ProductModeVSCode {
+			continue
+		}
+		if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+			continue
+		}
+		targets = append(targets, vscodeCompatibilityPromptTarget{
+			SurfaceSessionID: surfaceID,
+			GatewayID:        strings.TrimSpace(surface.GatewayID),
+		})
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].SurfaceSessionID < targets[j].SurfaceSessionID
+	})
+	return targets
+}
+
+func (a *App) handleVSCodeMigrateCommandPage(command control.DaemonCommand) []eventcontract.Event {
+	if !a.surfaceRunsVSCodeModeLocked(command.SurfaceSessionID) {
+		return []eventcontract.Event{vscodeMigrationStandaloneEvent(
+			command.SurfaceSessionID,
+			command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != "",
+			"仅 VS Code 模式可用",
+			[]string{"`/vscode-migrate` 只在 VS Code 模式下提供。请先发送 `/mode vscode`，再检查或执行迁移。"},
+			"",
+			"error",
+			nil,
+		)}
+	}
+	inlineReplace := command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != ""
+	flow := a.newVSCodeMigrationFlowLocked(
+		command.SurfaceSessionID,
+		a.service.SurfaceActorUserID(command.SurfaceSessionID),
+		func() string {
+			if inlineReplace {
+				return command.SourceMessageID
+			}
+			return ""
+		}(),
+		"",
+	)
+	a.mu.Unlock()
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+	if err != nil {
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_check_failed",
+			Title: "VS Code 迁移检查失败",
+			Text:  fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err),
+		})}
+	}
+	if issue == nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_not_needed",
+			Title: "无需迁移",
+			Text:  "当前 VS Code 接入已经是最新状态，无需再次迁移。",
+		})}
+	}
+	a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
+	event := vscodeMigrationPromptEvent(command.SurfaceSessionID, flow, inlineReplace, *issue)
+	event.GatewayID = command.GatewayID
+	return []eventcontract.Event{event}
+}
+
+func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []eventcontract.Event {
+	flow, blocked := a.requireVSCodeMigrationFlowLocked(
+		command.SurfaceSessionID,
+		command.PickerID,
+		a.service.SurfaceActorUserID(command.SurfaceSessionID),
+	)
+	if blocked != nil {
+		return blocked
+	}
+	inlineReplace := command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != ""
+	if inlineReplace {
+		flow.MessageID = strings.TrimSpace(command.SourceMessageID)
+	}
+	if strings.TrimSpace(command.OptionID) != "" && strings.TrimSpace(command.OptionID) != vscodeMigrationOwnerActionRun {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_failed",
+			Title: "无法执行迁移",
+			Text:  "不支持的 VS Code 迁移动作，请重新发送 `/vscode-migrate`。",
+		})}
+	}
+	a.mu.Unlock()
+	detect, err := a.buildVSCodeDetectResponse()
+	a.mu.Lock()
+	if err != nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_check_failed",
+			Title: "VS Code 迁移检查失败",
+			Text:  fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err),
+		})}
+	}
+	issue := classifyVSCodeCompatibilityIssue(detect)
+	if issue == nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_not_needed",
+			Title: "无需迁移",
+			Text:  "当前 VS Code 接入已经是最新状态，无需再次迁移。",
+		})}
+	}
+	a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
+	a.mu.Unlock()
+	err = a.applyVSCodeIntegration(vscodeApplyRequest{Mode: "managed_shim"})
+	a.mu.Lock()
+	if err != nil {
+		log.Printf("apply vscode migration failed: surface=%s err=%v", command.SurfaceSessionID, err)
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_failed",
+			Title: "迁移失败",
+			Text:  fmt.Sprintf("迁移扩展入口失败：%v。请确认 VS Code 已关闭，并且这台机器上的 Codex 扩展已经安装后再重试。", err),
+		})}
+	}
+	a.invalidateVSCodeCompatibilityCacheLocked()
+
+	a.mu.Unlock()
+	remaining, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+	if err != nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_applied_detect_failed",
+			Title: "迁移已执行",
+			Text:  fmt.Sprintf("扩展入口已经更新，但后续状态检查失败：%v。请重新打开 VS Code 后再试。", err),
+		})}
+	}
+	if remaining != nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_incomplete",
+			Title: "迁移未完成",
+			Text:  remaining.Summary,
+		})}
+	}
+
+	a.refreshVSCodeMigrationFlowLocked(flow, "")
+	a.surfaceResumeRuntime.vscodeResumeNotices[strings.TrimSpace(command.SurfaceSessionID)] = true
+	return []eventcontract.Event{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+		Code:  "vscode_migration_applied",
+		Title: issue.Title,
+		Text:  issue.SuccessText,
+	})}
+}

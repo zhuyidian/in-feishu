@@ -1,0 +1,851 @@
+package daemon
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
+	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
+)
+
+func TestUpgradeLatestManualCheckPromptsIdleSurface(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "/upgrade latest",
+	})
+
+	waitForUpgradeOperation(t, gateway, func(ops []feishuOperationView) bool {
+		for _, op := range ops {
+			if op.CardTitle == "发现可升级版本" {
+				return true
+			}
+		}
+		return false
+	})
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if stateValue.PendingUpgrade == nil {
+		t.Fatal("expected pending upgrade to be recorded")
+	}
+	if stateValue.PendingUpgrade.TargetVersion != "v1.1.0" {
+		t.Fatalf("pending target version = %q, want v1.1.0", stateValue.PendingUpgrade.TargetVersion)
+	}
+	if stateValue.PendingUpgrade.Source != install.UpgradeSourceRelease {
+		t.Fatalf("pending source = %q, want release", stateValue.PendingUpgrade.Source)
+	}
+	if stateValue.PendingUpgrade.TargetSlot != "v1.1.0" {
+		t.Fatalf("pending target slot = %q, want v1.1.0", stateValue.PendingUpgrade.TargetSlot)
+	}
+	if stateValue.PendingUpgrade.Phase != install.PendingUpgradePhasePrompted {
+		t.Fatalf("pending phase = %q, want %q", stateValue.PendingUpgrade.Phase, install.PendingUpgradePhasePrompted)
+	}
+	if stateValue.PendingUpgrade.SurfaceSessionID != "feishu:main:chat:1" {
+		t.Fatalf("pending surface = %q, want feishu:main:chat:1", stateValue.PendingUpgrade.SurfaceSessionID)
+	}
+}
+
+func TestUpgradeTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:         install.PendingUpgradePhaseAvailable,
+		TargetTrack:   install.ReleaseTrackProduction,
+		TargetVersion: "v1.1.0",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/upgrade track beta",
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.CurrentTrack != install.ReleaseTrackBeta {
+		t.Fatalf("current track = %q, want beta", updated.CurrentTrack)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected pending upgrade to be cleared, got %#v", updated.PendingUpgrade)
+	}
+}
+
+func TestDebugTrackAliasRejected(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	events := app.handleDebugDaemonCommand(control.DaemonCommand{
+		SurfaceSessionID: "feishu:main:chat:1",
+		Text:             "/debug track beta",
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected error debug page, got %#v", events)
+	}
+	page := catalogFromUIEvent(t, events[0])
+	if !strings.Contains(catalogSummaryText(page), "不支持的 /debug 子命令") {
+		t.Fatalf("expected unsupported-subcommand error on debug page, got %#v", page)
+	}
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.CurrentTrack != install.ReleaseTrackProduction {
+		t.Fatalf("current track = %q, want production to remain unchanged", updated.CurrentTrack)
+	}
+}
+
+func TestTickDoesNotAutoCheckOrPromptUpgrade(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+	app.upgradeRuntime.StartupDelay = 0
+	app.upgradeRuntime.CheckInterval = time.Hour
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "feishu:main:chat:2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+	})
+
+	app.onTick(context.Background(), time.Now().UTC())
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected no pending upgrade from tick-only path, got %#v", updated.PendingUpgrade)
+	}
+	for _, op := range gateway.snapshotOperations() {
+		if op.CardTitle == "发现可升级版本" {
+			t.Fatalf("expected no automatic upgrade prompt, got %#v", op)
+		}
+	}
+}
+
+func TestUpgradeLatestManualCheckPromptsDuringAutoRestorePendingHeadless(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	app.mu.Lock()
+	surface := app.surfaceByIDLocked("feishu:main:chat:1")
+	if surface == nil {
+		app.mu.Unlock()
+		t.Fatal("expected surface to exist")
+	}
+	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+		InstanceID:  "inst-headless-1",
+		ThreadID:    "thread-1",
+		ThreadTitle: "修复登录流程",
+		ThreadCWD:   "/data/dl/droid",
+		AutoRestore: true,
+		RequestedAt: time.Now().UTC(),
+		ExpiresAt:   time.Now().UTC().Add(time.Minute),
+		Status:      state.HeadlessLaunchStarting,
+	}
+	app.mu.Unlock()
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "/upgrade latest",
+	})
+
+	waitForUpgradeOperation(t, gateway, func(ops []feishuOperationView) bool {
+		for _, op := range ops {
+			if op.SurfaceSessionID == "feishu:main:chat:1" && op.CardTitle == "发现可升级版本" {
+				return true
+			}
+		}
+		return false
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if updated.PendingUpgrade == nil {
+		t.Fatal("expected pending upgrade to be recorded")
+	}
+	if updated.PendingUpgrade.Phase != install.PendingUpgradePhasePrompted {
+		t.Fatalf("pending phase = %q, want %q", updated.PendingUpgrade.Phase, install.PendingUpgradePhasePrompted)
+	}
+}
+
+func TestUpgradeLatestClearsStalePendingCandidateMatchingLiveVersion(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+	app.serverIdentity.Version = "v1.1.0"
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
+	}
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentVersion = "v1.0.0"
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:         install.PendingUpgradePhasePrompted,
+		Source:        install.UpgradeSourceRelease,
+		TargetTrack:   install.ReleaseTrackProduction,
+		TargetVersion: "v1.1.0",
+		TargetSlot:    "v1.1.0",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/upgrade latest",
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ops := gateway.snapshotOperations()
+		for _, op := range ops {
+			cardText := op.CardBody + "\n" + strings.Join(cardMarkdownContents(op.CardElements), "\n")
+			if op.CardTitle == "已是最新版本" && strings.Contains(cardText, "当前已经是 production track 的最新版本 v1.1.0。") {
+				updated, err := install.LoadState(statePath)
+				if err != nil {
+					t.Fatalf("LoadState updated: %v", err)
+				}
+				if updated.PendingUpgrade != nil {
+					t.Fatalf("expected stale pending upgrade to be cleared, got %#v", updated.PendingUpgrade)
+				}
+				if updated.CurrentVersion != "v1.1.0" {
+					t.Fatalf("current version = %q, want v1.1.0", updated.CurrentVersion)
+				}
+				return
+			}
+			if op.CardTitle == "Upgrade" && strings.Contains(cardText, "正在准备升级到 v1.1.0") {
+				t.Fatalf("expected stale candidate to be cleared before starting upgrade, got %#v", op)
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for latest-version notice")
+}
+
+func TestFlushUpgradeResultEmitsNoticeAndClearsPendingState(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentVersion = "v1.1.0"
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:            install.PendingUpgradePhaseCommitted,
+		TargetTrack:      install.ReleaseTrackProduction,
+		TargetVersion:    "v1.1.0",
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:9",
+		ChatID:           "chat-9",
+		ActorUserID:      "user-9",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+
+	waitForUpgradeOperation(t, gateway, func(ops []feishuOperationView) bool {
+		for _, op := range ops {
+			if op.CardTitle == "Upgrade" && op.SurfaceSessionID == "feishu:main:chat:9" {
+				return true
+			}
+		}
+		return false
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected pending upgrade result to be cleared, got %#v", updated.PendingUpgrade)
+	}
+}
+
+func TestFinishUpgradeStartFailureClearsPendingUpgrade(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:            install.PendingUpgradePhasePrompted,
+		Source:           install.UpgradeSourceRelease,
+		TargetTrack:      install.ReleaseTrackProduction,
+		TargetVersion:    "v1.1.0",
+		TargetSlot:       "v1.1.0",
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:3",
+		ChatID:           "chat-3",
+		ActorUserID:      "user-3",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+	app.service.MaterializeSurface("feishu:main:chat:3", "main", "chat-3", "user-3")
+
+	app.finishUpgradeStartFailure(upgradeStartRequest{
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:3",
+	}, context.DeadlineExceeded)
+
+	waitForUpgradeOperation(t, gateway, func(ops []feishuOperationView) bool {
+		for _, op := range ops {
+			if op.CardTitle == "Upgrade" && op.SurfaceSessionID == "feishu:main:chat:3" {
+				return true
+			}
+		}
+		return false
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected failed upgrade candidate to be cleared, got %#v", updated.PendingUpgrade)
+	}
+
+	beforeTickOps := len(gateway.snapshotOperations())
+	app.onTick(context.Background(), time.Now().UTC())
+	afterTickOps := len(gateway.snapshotOperations())
+	if afterTickOps != beforeTickOps {
+		t.Fatalf("expected no extra upgrade result notice after tick, before=%d after=%d", beforeTickOps, afterTickOps)
+	}
+}
+
+func TestPrepareUpgradeHelperShimWritesEmbeddedShimAndSidecar(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+
+	helperPath, err := app.prepareUpgradeHelperShimLocked(stateValue)
+	if err != nil {
+		t.Fatalf("prepareUpgradeHelperShimLocked: %v", err)
+	}
+	raw, err := os.ReadFile(helperPath)
+	if err != nil {
+		t.Fatalf("ReadFile helper: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected helper shim binary to be non-empty")
+	}
+	sidecarRaw, err := os.ReadFile(install.UpgradeShimSidecarPath(helperPath))
+	if err != nil {
+		t.Fatalf("ReadFile sidecar: %v", err)
+	}
+	sidecar, err := upgradeshim.ReadSidecar(install.UpgradeShimSidecarPath(helperPath))
+	if err != nil {
+		t.Fatalf("ReadSidecar: %v", err)
+	}
+	if !upgradeshim.SamePath(sidecar.InstallStatePath, statePath) {
+		t.Fatalf("sidecar install state path = %q, want %q (raw=%q)", sidecar.InstallStatePath, statePath, string(sidecarRaw))
+	}
+}
+
+func TestBuildDebugRootPageLinksBackToAdminCommands(t *testing.T) {
+	catalog := buildDebugRootPageView(install.InstallState{
+		CurrentTrack:   install.ReleaseTrackBeta,
+		CurrentVersion: "v1.0.0",
+	}, false, "", "", "")
+	if !catalog.Interactive {
+		t.Fatalf("expected interactive debug catalog, got %#v", catalog)
+	}
+	assertCatalogUsesPlainTextContracts(t, &catalog)
+	if len(catalog.Sections) != 1 {
+		t.Fatalf("expected a single debug menu section, got %#v", catalog.Sections)
+	}
+	if len(catalog.Sections[0].Entries) != 3 {
+		t.Fatalf("expected debug menu to expose admin return + 2 admin links, got %#v", catalog.Sections[0].Entries)
+	}
+	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/admin" {
+		t.Fatalf("expected debug catalog to link back to /admin, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+	if got := catalog.Sections[0].Entries[1].Buttons[0].CommandText; got != "/admin web" {
+		t.Fatalf("expected debug catalog to expose /admin web, got %#v", catalog.Sections[0].Entries[1].Buttons)
+	}
+	if got := catalog.Sections[0].Entries[2].Buttons[0].CommandText; got != "/admin localweb" {
+		t.Fatalf("expected debug catalog to expose /admin localweb, got %#v", catalog.Sections[0].Entries[2].Buttons)
+	}
+	summary := catalogSummaryText(&catalog)
+	if !strings.Contains(summary, "/admin web") || !strings.Contains(summary, "/admin localweb") {
+		t.Fatalf("expected debug root page to explain admin migration, got %#v", summary)
+	}
+}
+
+func TestBuildUpgradeRootPageOnlyExposesUpgradeMenus(t *testing.T) {
+	catalog := buildUpgradeRootPageView(install.InstallState{
+		CurrentTrack:   install.ReleaseTrackProduction,
+		CurrentVersion: "v1.0.0",
+	}, false, "", "", "")
+	if !catalog.Interactive {
+		t.Fatalf("expected interactive upgrade catalog, got %#v", catalog)
+	}
+	assertCatalogUsesPlainTextContracts(t, &catalog)
+	if len(catalog.Sections) != 1 {
+		t.Fatalf("expected a single upgrade menu section, got %#v", catalog.Sections)
+	}
+	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/upgrade track" {
+		t.Fatalf("expected upgrade catalog to expose track button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+	if button := catalog.Sections[0].Entries[0].Buttons[0]; button.Kind != control.CommandCatalogButtonCallbackAction || button.CallbackValue["kind"] != "page_local_action" || button.CallbackValue["action_kind"] != string(control.ActionUpgradeCommand) || button.CallbackValue["action_arg"] != "track" {
+		t.Fatalf("expected upgrade root button to stay on current card, got %#v", button)
+	}
+	for _, button := range catalog.Sections[0].Entries[0].Buttons {
+		if strings.HasPrefix(button.CommandText, "/upgrade track ") {
+			t.Fatalf("expected root upgrade menu to keep track switching inside the track submenu, got %#v", catalog.Sections[0].Entries[0].Buttons)
+		}
+	}
+	summary := catalogSummaryText(&catalog)
+	if summary != "" {
+		t.Fatalf("expected upgrade root page to stay free of summary copy, got %#v", summary)
+	}
+}
+
+func TestBuildUpgradeRootPageCanExposeCodexUpgradeEntry(t *testing.T) {
+	catalog := buildUpgradeRootPageView(install.InstallState{
+		CurrentTrack:   install.ReleaseTrackProduction,
+		CurrentVersion: "v1.0.0",
+	}, true, "", "", "")
+	found := false
+	for _, button := range catalog.Sections[0].Entries[0].Buttons {
+		if button.CommandText == "/upgrade codex" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected upgrade root page to expose /upgrade codex button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+}
+
+func TestBuildUpgradePromptCatalogUsesLocalCurrentCardButtons(t *testing.T) {
+	catalog := buildUpgradePromptPageView(install.InstallState{
+		CurrentVersion: "v1.0.0",
+		PendingUpgrade: &install.PendingUpgrade{
+			Source:        install.UpgradeSourceRelease,
+			TargetTrack:   install.ReleaseTrackBeta,
+			TargetVersion: "v1.1.0",
+			TargetSlot:    "v1.1.0",
+		},
+	})
+	entry := catalog.Sections[0].Entries[0]
+	if len(entry.Buttons) != 2 {
+		t.Fatalf("prompt buttons = %#v, want confirm + status", entry.Buttons)
+	}
+	if value := entry.Buttons[0].CallbackValue; entry.Buttons[0].Kind != control.CommandCatalogButtonCallbackAction || value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionUpgradeCommand) || value["action_arg"] != "latest" {
+		t.Fatalf("expected prompt confirm button to stay on current card, got %#v", entry.Buttons[0])
+	}
+	if value := entry.Buttons[1].CallbackValue; entry.Buttons[1].Kind != control.CommandCatalogButtonCallbackAction || value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionUpgradeCommand) {
+		t.Fatalf("expected prompt status button to stay on current card, got %#v", entry.Buttons[1])
+	}
+}
+
+func TestUpgradeRootPageShowsCodexButtonOnlyForStandaloneInstallations(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	app.codexUpgradeRuntime.Inspect = func(context.Context, codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
+		return codexupgrade.Installation{
+			ConfiguredBinary: "codex",
+			EffectiveBinary:  "codex",
+			SourceKind:       codexupgrade.SourceStandaloneNPM,
+			PackageVersion:   "0.123.0",
+		}, nil
+	}
+
+	events := app.handleDaemonCommand(control.DaemonCommand{
+		Kind:             control.DaemonCommandUpgrade,
+		SurfaceSessionID: "surface-1",
+		Text:             "/upgrade",
+	})
+	page := catalogFromUIEvent(t, events[0])
+	foundCodex := false
+	for _, button := range page.Sections[0].Entries[0].Buttons {
+		if button.CommandText == "/upgrade codex" {
+			foundCodex = true
+			break
+		}
+	}
+	if !foundCodex {
+		t.Fatalf("expected /upgrade root page to expose /upgrade codex, got %#v", page.Sections[0].Entries[0].Buttons)
+	}
+
+	app.codexUpgradeRuntime.Inspect = func(context.Context, codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
+		return codexupgrade.Installation{
+			ConfiguredBinary: "codex",
+			EffectiveBinary:  "/Applications/VSCode.app/codex",
+			SourceKind:       codexupgrade.SourceVSCodeBundle,
+		}, nil
+	}
+	events = app.handleDaemonCommand(control.DaemonCommand{
+		Kind:             control.DaemonCommandUpgrade,
+		SurfaceSessionID: "surface-1",
+		Text:             "/upgrade",
+	})
+	page = catalogFromUIEvent(t, events[0])
+	for _, button := range page.Sections[0].Entries[0].Buttons {
+		if button.CommandText == "/upgrade codex" {
+			t.Fatalf("expected /upgrade root page to hide /upgrade codex for bundle-backed installs, got %#v", page.Sections[0].Entries[0].Buttons)
+		}
+	}
+}
+
+func TestBuildUpgradeTrackPageOnlyExposesTrackSwitching(t *testing.T) {
+	catalog := buildUpgradeTrackPageView(install.InstallState{
+		CurrentTrack: install.ReleaseTrackProduction,
+	})
+	assertCatalogUsesPlainTextContracts(t, &catalog)
+	if len(catalog.Sections) != 1 {
+		t.Fatalf("expected only the track switch section, got %#v", catalog.Sections)
+	}
+	if got := len(catalog.Sections[0].Entries[0].Buttons); got == 0 {
+		t.Fatalf("expected track menu buttons, got %#v", catalog.Sections)
+	}
+	for _, button := range catalog.Sections[0].Entries[0].Buttons {
+		if button.CommandText == "/upgrade latest" {
+			t.Fatalf("expected track menu to stop exposing upgrade latest, got %#v", catalog.Sections[0].Entries[0].Buttons)
+		}
+	}
+}
+
+func TestParseDebugCommandTextRejectsDeprecatedAdminSubcommand(t *testing.T) {
+	if _, err := parseDebugCommandText("/debug admin"); err == nil || !strings.Contains(err.Error(), "/admin web") {
+		t.Fatalf("expected /debug admin to be rejected with /admin web guidance, got %v", err)
+	}
+}
+
+func TestParseDebugCommandTextRejectsLegacySubcommands(t *testing.T) {
+	tests := []string{
+		"/debug track",
+		"/debug track beta",
+		"/debug upgrade",
+	}
+	for _, input := range tests {
+		if _, err := parseDebugCommandText(input); err == nil {
+			t.Fatalf("expected %q to be rejected", input)
+		}
+	}
+}
+
+func TestParseUpgradeCommandTextRecognizesTrackCommands(t *testing.T) {
+	parsed, err := parseUpgradeCommandText("/upgrade track")
+	if err != nil {
+		t.Fatalf("parseUpgradeCommandText show: %v", err)
+	}
+	if parsed.Mode != upgradeCommandShowTrack {
+		t.Fatalf("show mode = %q, want %q", parsed.Mode, upgradeCommandShowTrack)
+	}
+
+	parsed, err = parseUpgradeCommandText("/upgrade track beta")
+	if err != nil {
+		t.Fatalf("parseUpgradeCommandText set: %v", err)
+	}
+	if parsed.Mode != upgradeCommandSetTrack {
+		t.Fatalf("set mode = %q, want %q", parsed.Mode, upgradeCommandSetTrack)
+	}
+	if parsed.Track != install.ReleaseTrackBeta {
+		t.Fatalf("track = %q, want beta", parsed.Track)
+	}
+
+	parsed, err = parseUpgradeCommandText("/upgrade codex")
+	if err != nil {
+		t.Fatalf("parseUpgradeCommandText codex: %v", err)
+	}
+	if parsed.Mode != upgradeCommandCodex {
+		t.Fatalf("codex mode = %q, want %q", parsed.Mode, upgradeCommandCodex)
+	}
+}
+
+func TestAdminWebCommandIssuesExternalAccessLink(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	defer app.Shutdown(nil)
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "disabled",
+		},
+	})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAdminCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/admin web",
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ops := gateway.snapshotOperations()
+		for _, op := range ops {
+			if op.CardTitle != "系统管理" {
+				continue
+			}
+			if !strings.Contains(op.CardBody, "临时管理页外链已生成") || !strings.Contains(op.CardBody, "/g/") {
+				continue
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for admin web link notice")
+}
+
+func TestAdminWebCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	defer app.Shutdown(nil)
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+
+	provider := &blockingExternalAccessProvider{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	startedCh := provider.started
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+		},
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Provider:          provider,
+		DefaultLinkTTL:    10 * time.Second,
+		DefaultSessionTTL: 30 * time.Second,
+	})
+
+	done := make(chan struct{})
+	go func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionAdminCommand,
+			SurfaceSessionID: "feishu:main:chat:1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+			Text:             "/admin web",
+		})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected /admin web handler to return after sending preparing notice")
+	}
+
+	select {
+	case <-startedCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for external access provider to start")
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) == 0 {
+		t.Fatal("expected preparing notice operation")
+	}
+	last := ops[len(ops)-1]
+	if last.CardTitle != "系统管理" || !strings.Contains(last.CardBody, "正在准备临时管理页外链") {
+		t.Fatalf("expected preparing notice, got %#v", last)
+	}
+	if strings.Contains(last.CardBody, "/g/") {
+		t.Fatalf("preparing notice should not contain the final link yet: %#v", last.CardBody)
+	}
+
+	close(provider.release)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ops = gateway.snapshotOperations()
+		for _, op := range ops {
+			if op.CardTitle != "系统管理" {
+				continue
+			}
+			if !strings.Contains(op.CardBody, "临时管理页外链已生成") || !strings.Contains(op.CardBody, "/g/") {
+				continue
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for admin web link notice after preparing notice")
+}
+
+type blockingExternalAccessProvider struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingExternalAccessProvider) Kind() string { return "blocking" }
+
+func (p *blockingExternalAccessProvider) EnsurePublicBase(ctx context.Context, _ string) (externalaccess.PublicBase, error) {
+	if p.started != nil {
+		close(p.started)
+		p.started = nil
+	}
+	select {
+	case <-p.release:
+		return externalaccess.PublicBase{
+			BaseURL:   "https://example.trycloudflare.com",
+			StartedAt: time.Now().UTC(),
+		}, nil
+	case <-ctx.Done():
+		return externalaccess.PublicBase{}, ctx.Err()
+	}
+}
+
+func (p *blockingExternalAccessProvider) Snapshot() externalaccess.ProviderStatus {
+	return externalaccess.ProviderStatus{Kind: p.Kind(), Ready: true}
+}
+
+func (p *blockingExternalAccessProvider) Close() error { return nil }
+
+type feishuOperationView struct {
+	SurfaceSessionID string
+	CardTitle        string
+}
+
+func waitForUpgradeOperation(t *testing.T, gateway *lifecycleGateway, predicate func([]feishuOperationView) bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ops := gateway.snapshotOperations()
+		views := make([]feishuOperationView, 0, len(ops))
+		for _, op := range ops {
+			views = append(views, feishuOperationView{
+				SurfaceSessionID: op.SurfaceSessionID,
+				CardTitle:        op.CardTitle,
+			})
+		}
+		if predicate(views) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for expected upgrade operation")
+}
+
+func newUpgradeTestApp(t *testing.T, gateway *lifecycleGateway) (*App, string) {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	binaryPath := filepath.Join(dataDir, "codex-remote")
+	statePath := filepath.Join(dataDir, "install-state.json")
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		BinaryIdentity: agentproto.BinaryIdentity{
+			Version:    "v1.0.0",
+			BinaryPath: binaryPath,
+		},
+	})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: binaryPath,
+		Paths: relayruntime.Paths{
+			DataDir:  dataDir,
+			StateDir: dataDir,
+			LogsDir:  dataDir,
+		},
+	})
+
+	stateValue := install.InstallState{
+		StatePath:         statePath,
+		InstallSource:     install.InstallSourceRelease,
+		CurrentTrack:      install.ReleaseTrackProduction,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: binaryPath,
+		VersionsRoot:      filepath.Join(dataDir, "releases"),
+		CurrentSlot:       "v1.0.0",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+	return app, statePath
+}

@@ -1,0 +1,1213 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Remote v0.0.0 管理</title>
+    <style>
+      :root {
+        --bg: #f3f6f4;
+        --panel: #ffffff;
+        --line: #d6e2dd;
+        --ink: #14211e;
+        --sub: #4a615b;
+        --muted: #69807a;
+        --brand: #0e8269;
+        --brand-2: #0a6b56;
+        --good: #1f7f40;
+        --warn: #a76400;
+        --bad: #b0283b;
+        --shadow: 0 14px 36px rgba(9, 28, 23, 0.08);
+        --radius-xl: 24px;
+        --radius-lg: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family:
+          "Avenir Next",
+          "PingFang SC",
+          "Microsoft YaHei",
+          "Noto Sans CJK SC",
+          sans-serif;
+        background:
+          radial-gradient(900px 460px at -12% -20%, #c6efe2 0%, transparent 58%),
+          radial-gradient(760px 420px at 112% -15%, #fae8c3 0%, transparent 54%),
+          var(--bg);
+      }
+
+      .shell {
+        max-width: 1260px;
+        margin: 28px auto;
+        padding: 0 18px 30px;
+      }
+
+      .topbar {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+        padding: 18px 20px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        margin: 8px 0 0;
+        font-size: 14px;
+        color: var(--sub);
+      }
+
+      .layout {
+        margin-top: 16px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .block {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+      }
+
+      .block-head {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .block-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .block-desc {
+        margin: 6px 0 0;
+        color: var(--sub);
+        font-size: 14px;
+      }
+
+      .block-body {
+        padding: 16px 18px 18px;
+      }
+
+      .robot-layout {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 12px;
+      }
+
+      .robot-list {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px;
+        background: #fbfdfc;
+      }
+
+      .robot-item {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 11px;
+        text-align: left;
+        margin: 7px 0;
+        cursor: pointer;
+      }
+
+      .robot-item.active {
+        border-color: #7fcdc0;
+        background: #ebfaf7;
+      }
+
+      .robot-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .robot-name {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .robot-id {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+
+      .card-head {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .card-desc {
+        margin: 8px 0 0;
+        color: var(--sub);
+        font-size: 14px;
+      }
+
+      .card-body {
+        padding: 16px 18px 18px;
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 8px;
+        margin: 8px 0;
+        font-size: 14px;
+      }
+
+      .kv dt {
+        color: var(--muted);
+      }
+
+      .kv dd {
+        margin: 0;
+      }
+
+      .notice {
+        border-radius: 10px;
+        padding: 11px 13px;
+        font-size: 14px;
+        border: 1px solid transparent;
+      }
+
+      .notice.good {
+        color: var(--good);
+        background: #edf9f0;
+        border-color: #cbe6d2;
+      }
+
+      .notice.warn {
+        color: var(--warn);
+        background: #fff6e9;
+        border-color: #efd9b5;
+      }
+
+      .notice.bad {
+        color: var(--bad);
+        background: #fff0f3;
+        border-color: #efcbd2;
+      }
+
+      .hint {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .link {
+        color: #0b6b57;
+        text-decoration: none;
+      }
+
+      .link:hover {
+        text-decoration: underline;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 13px;
+        color: var(--sub);
+      }
+
+      .input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 11px;
+        font-size: 14px;
+        color: var(--ink);
+        background: #fff;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+
+      .btn.primary {
+        background: var(--brand);
+        color: #fff;
+      }
+
+      .btn.primary:hover {
+        background: var(--brand-2);
+      }
+
+      .btn.secondary {
+        background: #e5f3ef;
+        color: #15473b;
+      }
+
+      .btn.ghost {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--sub);
+      }
+
+      .btn.danger {
+        background: #ffe9ed;
+        color: #8f2232;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 5px 10px;
+        font-size: 12px;
+        color: var(--sub);
+        background: #fff;
+      }
+
+      .tag.warn {
+        color: var(--warn);
+        background: #fff6e9;
+        border-color: #efd9b5;
+      }
+
+      .three-col {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .soft-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        background: #fbfdfc;
+      }
+
+      .soft-card h4 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .soft-card p {
+        margin: 8px 0 0;
+        color: var(--sub);
+        font-size: 13px;
+      }
+
+      .modal-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 28, 24, 0.42);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 99;
+      }
+
+      .modal-mask.open {
+        display: flex;
+      }
+
+      .modal-card {
+        width: min(460px, 100%);
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 16px 16px 14px;
+      }
+
+      .modal-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .modal-text {
+        margin: 8px 0 0;
+        font-size: 14px;
+        color: var(--sub);
+      }
+
+      @media (max-width: 980px) {
+        .robot-layout,
+        .three-col,
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .shell {
+          margin: 14px auto;
+          padding: 0 12px 20px;
+        }
+
+        .topbar {
+          padding: 14px;
+        }
+
+        .title {
+          font-size: 23px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <h1 class="title">Codex Remote v0.0.0 管理</h1>
+        <p class="subtitle">管理机器人、系统集成与本地存储。</p>
+      </header>
+
+      <main class="layout">
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">机器人管理</h2>
+            <p class="block-desc">查看所有机器人并处理需要关注的状态。</p>
+          </div>
+          <div class="block-body">
+            <div class="robot-layout">
+              <div id="robotList" class="robot-list"></div>
+              <div id="robotDetail" class="card"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">系统集成</h2>
+            <p class="block-desc">统一管理自动运行设置与 VS Code 集成。</p>
+          </div>
+          <div class="block-body three-col">
+            <article class="soft-card">
+              <h4>自动运行设置</h4>
+              <p id="autoRunText">当前已启用。</p>
+              <div class="row" style="margin-top:10px">
+                <button id="autoRunToggle" class="btn secondary"></button>
+              </div>
+            </article>
+            <article class="soft-card">
+              <h4>VS Code 集成</h4>
+              <p id="vscodeText">当前已接入。</p>
+              <div class="row" style="margin-top:10px">
+                <button id="vscodeRepairBtn" class="btn ghost">重新检查并修复</button>
+              </div>
+            </article>
+            <article class="soft-card">
+              <h4>状态提醒</h4>
+              <p id="integrationHint">当前没有需要处理的集成异常。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">Claude 配置</h2>
+            <p class="block-desc">管理不同的 Claude 连接配置。</p>
+          </div>
+          <div class="block-body">
+            <div class="robot-layout">
+              <div id="claudeList" class="robot-list"></div>
+              <div id="claudeDetail" class="card"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">Codex Provider</h2>
+            <p class="block-desc">管理不同的 Codex 连接配置。</p>
+          </div>
+          <div class="block-body">
+            <div class="robot-layout">
+              <div id="codexList" class="robot-list"></div>
+              <div id="codexDetail" class="card"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">存储管理</h2>
+            <p class="block-desc">查看占用并按需清理旧文件。</p>
+          </div>
+          <div class="block-body three-col">
+            <article class="soft-card">
+              <h4>预览文件</h4>
+              <p id="previewStat"></p>
+              <div class="row" style="margin-top:10px">
+                <button id="cleanPreviewBtn" class="btn secondary">清理旧预览</button>
+              </div>
+            </article>
+            <article class="soft-card">
+              <h4>图片暂存</h4>
+              <p id="imageStat"></p>
+              <div class="row" style="margin-top:10px">
+                <button id="cleanImageBtn" class="btn secondary">清理旧图片</button>
+              </div>
+            </article>
+            <article class="soft-card">
+              <h4>日志文件</h4>
+              <p id="logStat"></p>
+              <div class="row" style="margin-top:10px">
+                <button id="cleanLogBtn" class="btn secondary">清理一天前日志</button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="deleteRobotModal" class="modal-mask" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteRobotTitle">
+        <h3 id="deleteRobotTitle" class="modal-title">确认删除机器人</h3>
+        <p id="deleteRobotText" class="modal-text"></p>
+        <div class="row" style="margin-top:14px">
+          <button id="cancelDeleteRobot" class="btn ghost">取消</button>
+          <button id="confirmDeleteRobot" class="btn danger">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const state = {
+        selectedRobot: "bot-main",
+        selectedClaude: "default",
+        selectedCodex: "default",
+        newRobotStatus: "idle",
+        eventAttempt: 0,
+        callbackAttempt: 0,
+        eventStatus: "idle",
+        callbackStatus: "idle",
+        deleteTarget: null,
+        autoRunOn: true,
+        vscodeReady: true,
+        previewFiles: 236,
+        previewSize: "1.4 GB",
+        imageFiles: 92,
+        imageSize: "420 MB",
+        logFiles: 128,
+        logSize: "860 MB",
+      };
+
+      const robots = [
+        { id: "bot-main", title: "主机器人", appId: "cli_main_01", status: "ok", issues: [] },
+        { id: "bot-team", title: "协作机器人", appId: "cli_team_09", status: "warn", issues: ["缺少 drive:drive 权限，文档预览不可用。"] },
+        { id: "new", title: "新增机器人", appId: "", status: "new", issues: [] },
+      ];
+
+      const claudeProfiles = [
+        {
+          id: "default",
+          title: "默认配置",
+          tag: "系统",
+          builtIn: true,
+          authMode: "沿用当前 Claude",
+          endpoint: "跟随当前 Claude",
+          model: "跟随当前 Claude",
+          smallModel: "跟随当前 Claude",
+          tokenStatus: "不会单独保存 Token",
+        },
+        {
+          id: "proxy",
+          title: "研发代理",
+          tag: "专用 Token",
+          builtIn: false,
+          authMode: "专用 Token",
+          endpoint: "https://proxy.internal/v1",
+          model: "claude-sonnet-4",
+          smallModel: "claude-3-5-haiku",
+          tokenStatus: "已保存专用 Token",
+        },
+        {
+          id: "new-claude",
+          title: "新增配置",
+          tag: "新增",
+          builtIn: false,
+          isNew: true,
+        },
+      ];
+
+      const codexProviders = [
+        {
+          id: "default",
+          title: "系统默认",
+          tag: "默认",
+          builtIn: true,
+          endpoint: "沿用当前 Codex 默认设置",
+          keyStatus: "不单独保存 API Key",
+        },
+        {
+          id: "team-proxy",
+          title: "研发代理",
+          tag: "自定义",
+          builtIn: false,
+          endpoint: "https://proxy.internal/v1",
+          keyStatus: "已保存 API Key",
+        },
+        {
+          id: "new-codex",
+          title: "新增配置",
+          tag: "新增",
+          builtIn: false,
+          isNew: true,
+        },
+      ];
+
+      const robotList = document.getElementById("robotList");
+      const robotDetail = document.getElementById("robotDetail");
+      const claudeList = document.getElementById("claudeList");
+      const claudeDetail = document.getElementById("claudeDetail");
+      const codexList = document.getElementById("codexList");
+      const codexDetail = document.getElementById("codexDetail");
+      const deleteRobotModal = document.getElementById("deleteRobotModal");
+      const deleteRobotText = document.getElementById("deleteRobotText");
+
+      function renderRobotList() {
+        robotList.innerHTML = robots
+          .map((r) => {
+            const active = r.id === state.selectedRobot;
+            let tag = "";
+            if (r.status === "warn") tag = `<span class="tag warn">有异常</span>`;
+            if (r.status === "new") tag = `<span class="tag">新增</span>`;
+            return `
+              <button class="robot-item ${active ? "active" : ""}" data-rid="${r.id}">
+                <div class="robot-top">
+                  <p class="robot-name">${r.title}</p>
+                  ${tag}
+                </div>
+                ${r.appId ? `<p class="robot-id">${r.appId}</p>` : `<p class="robot-id">点击开始接入</p>`}
+              </button>`;
+          })
+          .join("");
+
+        robotList.querySelectorAll(".robot-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedRobot = btn.dataset.rid;
+            state.eventStatus = "idle";
+            state.callbackStatus = "idle";
+            renderAdmin();
+          });
+        });
+      }
+
+      function renderRobotDetail() {
+        const selected = robots.find((r) => r.id === state.selectedRobot);
+        if (!selected) return;
+
+        if (selected.id === "new") {
+          robotDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">新增机器人</h3>
+              <p class="card-desc">完成连接验证后将自动进入权限检查。</p>
+            </div>
+            <div class="card-body">
+              <div class="grid-2">
+                <div class="field">
+                  <label>机器人名称</label>
+                  <input id="newRobotName" class="input" placeholder="例如：运营机器人" />
+                </div>
+                <div class="field">
+                  <label>App ID</label>
+                  <input id="newRobotAppId" class="input" placeholder="请输入 App ID" />
+                </div>
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>App Secret</label>
+                <input id="newRobotSecret" class="input" placeholder="请输入 App Secret" />
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button id="newRobotSave" class="btn primary">验证并保存</button>
+              </div>
+              <div id="newRobotSlot" style="margin-top:10px"></div>
+            </div>`;
+          document.getElementById("newRobotSave").onclick = () => {
+            const appId = document.getElementById("newRobotAppId").value.trim();
+            const sec = document.getElementById("newRobotSecret").value.trim();
+            const slot = document.getElementById("newRobotSlot");
+            if (!appId || !sec) {
+              slot.innerHTML = `<div class="notice bad">请填写完整的 App ID 和 App Secret。</div>`;
+              return;
+            }
+            if (state.newRobotStatus === "idle") {
+              state.newRobotStatus = "missing";
+            } else if (state.newRobotStatus === "missing") {
+              state.newRobotStatus = "ready";
+            }
+
+            if (state.newRobotStatus === "missing") {
+              slot.innerHTML = `
+                <div class="notice bad">当前还不能进入下一步，请先补齐缺失权限。</div>
+                <p class="hint"><a href="#" onclick="return false;" class="link">打开飞书后台权限配置</a></p>
+                <div class="row" style="margin-top:12px">
+                  <button id="newRobotRecheck" class="btn primary">我已处理，重新检查</button>
+                  <button id="newRobotSkip" class="btn ghost">强制跳过这一步</button>
+                </div>`;
+              document.getElementById("newRobotRecheck").onclick = () => {
+                state.newRobotStatus = "ready";
+                renderAdmin();
+              };
+              document.getElementById("newRobotSkip").onclick = () => {
+                state.newRobotStatus = "skipped";
+                renderAdmin();
+              };
+              return;
+            }
+
+            if (state.newRobotStatus === "skipped") {
+              slot.innerHTML = `<div class="notice warn">已跳过这一步，你可以继续后面的设置。</div>`;
+              return;
+            }
+
+            slot.innerHTML = `<div class="notice good">权限检查通过，可以继续后面的设置。</div>`;
+          };
+          if (state.newRobotStatus === "skipped") {
+            document.getElementById("newRobotSlot").innerHTML =
+              `<div class="notice warn">已跳过这一步，你可以继续后面的设置。</div>`;
+          } else if (state.newRobotStatus === "ready") {
+            document.getElementById("newRobotSlot").innerHTML =
+              `<div class="notice good">权限检查通过，可以继续后面的设置。</div>`;
+          }
+          return;
+        }
+
+        const testSlot = `
+          ${state.eventStatus === "pending" ? `<div class="notice warn">事件订阅测试已发出，等待回复。</div>` : ""}
+          ${state.eventStatus === "error" ? `<div class="notice bad">事件订阅测试未通过，请重试。</div>` : ""}
+          ${state.eventStatus === "ok" ? `<div class="notice good">事件订阅测试通过。</div>` : ""}
+          ${state.callbackStatus === "pending" ? `<div class="notice warn">回调测试卡片已发送，等待按钮回调。</div>` : ""}
+          ${state.callbackStatus === "error" ? `<div class="notice bad">回调测试发送失败，请稍后重试。</div>` : ""}
+          ${state.callbackStatus === "ok" ? `<div class="notice good">回调测试通过。</div>` : ""}
+        `;
+
+        const issueBlock =
+          selected.issues.length > 0
+            ? `<div class="notice bad">${selected.issues[0]}</div><p class="hint"><a href="#" onclick="return false;" class="link">打开飞书后台处理权限</a></p>`
+            : `<div class="notice good">当前状态正常。</div>`;
+
+        robotDetail.innerHTML = `
+          <div class="card-head">
+            <h3 class="card-title">${selected.title}</h3>
+            <p class="card-desc">机器人状态与测试入口。</p>
+          </div>
+          <div class="card-body">
+            <dl class="kv">
+              <dt>App ID</dt><dd>${selected.appId}</dd>
+              <dt>连接状态</dt><dd>${selected.status === "ok" ? "连接正常" : "需处理"}</dd>
+            </dl>
+            ${issueBlock}
+            <div class="row" style="margin-top:12px">
+              <button id="adminTestEvent" class="btn primary">测试事件订阅</button>
+              <button id="adminTestCallback" class="btn secondary">测试回调</button>
+              <button id="deleteRobotBtn" class="btn danger">删除机器人</button>
+            </div>
+            <div style="margin-top:10px">${testSlot}</div>
+          </div>`;
+
+        document.getElementById("adminTestEvent").onclick = () => {
+          state.eventAttempt += 1;
+          state.eventStatus = "pending";
+          renderAdmin();
+          window.setTimeout(() => {
+            state.eventStatus = state.eventAttempt % 2 === 1 ? "ok" : "error";
+            renderAdmin();
+          }, 880);
+        };
+        document.getElementById("adminTestCallback").onclick = () => {
+          state.callbackAttempt += 1;
+          state.callbackStatus = "pending";
+          renderAdmin();
+          window.setTimeout(() => {
+            state.callbackStatus = state.callbackAttempt % 2 === 1 ? "error" : "ok";
+            renderAdmin();
+          }, 880);
+        };
+        document.getElementById("deleteRobotBtn").onclick = () => openDeleteRobotModal(selected.id);
+      }
+
+      function renderClaudeList() {
+        claudeList.innerHTML = claudeProfiles
+          .map((profile) => {
+            const active = profile.id === state.selectedClaude;
+            return `
+              <button class="robot-item ${active ? "active" : ""}" data-cid="${profile.id}">
+                <div class="robot-top">
+                  <p class="robot-name">${profile.title}</p>
+                  <span class="tag">${profile.tag}</span>
+                </div>
+                <p class="robot-id">${
+                  profile.isNew
+                    ? "创建一套新的 Claude 配置"
+                    : profile.builtIn
+                      ? "沿用当前 Claude 的本机设置"
+                      : profile.endpoint
+                }</p>
+              </button>`;
+          })
+          .join("");
+
+        claudeList.querySelectorAll(".robot-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedClaude = btn.dataset.cid;
+            renderAdmin();
+          });
+        });
+      }
+
+      function renderClaudeDetail() {
+        const profile = claudeProfiles.find((item) => item.id === state.selectedClaude);
+        if (!profile) return;
+
+        if (profile.isNew) {
+          claudeDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">新增 Claude 配置</h3>
+              <p class="card-desc">填写一套新的 Claude 连接配置。</p>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <label>配置名称</label>
+                <input id="newClaudeName" class="input" placeholder="例如：研发代理" />
+              </div>
+              <div class="grid-2" style="margin-top:12px">
+                <div class="field">
+                  <label>端点地址</label>
+                  <input id="newClaudeEndpoint" class="input" placeholder="例如：https://proxy.internal/v1" />
+                </div>
+                <div class="field">
+                  <label>认证方式</label>
+                  <input class="input" value="专用 Token" readonly />
+                </div>
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>认证 Token</label>
+                <input id="newClaudeToken" class="input" placeholder="请输入 Token" />
+              </div>
+              <div class="grid-2" style="margin-top:12px">
+                <div class="field">
+                  <label>主模型</label>
+                  <input id="newClaudeModel" class="input" placeholder="例如：claude-sonnet-4" />
+                </div>
+                <div class="field">
+                  <label>轻量模型</label>
+                  <input id="newClaudeSmallModel" class="input" placeholder="例如：claude-3-5-haiku" />
+                </div>
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button id="saveClaudeProfile" class="btn primary">保存配置</button>
+              </div>
+              <div id="newClaudeSlot" style="margin-top:10px"></div>
+            </div>`;
+
+          document.getElementById("saveClaudeProfile").onclick = () => {
+            const name = document.getElementById("newClaudeName").value.trim();
+            const endpoint = document.getElementById("newClaudeEndpoint").value.trim();
+            const token = document.getElementById("newClaudeToken").value.trim();
+            const model = document.getElementById("newClaudeModel").value.trim() || "claude-sonnet-4";
+            const smallModel = document.getElementById("newClaudeSmallModel").value.trim() || "claude-3-5-haiku";
+            const slot = document.getElementById("newClaudeSlot");
+            if (!name || !endpoint || !token) {
+              slot.innerHTML = `<div class="notice bad">请填写完整的名称、端点和 Token。</div>`;
+              return;
+            }
+            const created = {
+              id: `custom-${Date.now()}`,
+              title: name,
+              tag: "专用 Token",
+              builtIn: false,
+              authMode: "专用 Token",
+              endpoint,
+              model,
+              smallModel,
+              tokenStatus: "已保存专用 Token",
+            };
+            claudeProfiles.splice(claudeProfiles.length - 1, 0, created);
+            state.selectedClaude = created.id;
+            renderAdmin();
+          };
+          return;
+        }
+
+        if (profile.builtIn) {
+          claudeDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">${profile.title}</h3>
+              <p class="card-desc">这个配置会沿用当前 Claude 在本机上的设置。</p>
+            </div>
+            <div class="card-body">
+              <dl class="kv">
+                <dt>认证方式</dt><dd>${profile.authMode}</dd>
+                <dt>端点</dt><dd>${profile.endpoint}</dd>
+                <dt>主模型</dt><dd>${profile.model}</dd>
+                <dt>轻量模型</dt><dd>${profile.smallModel}</dd>
+              </dl>
+              <div class="notice good" style="margin-top:12px">${profile.tokenStatus}</div>
+              <div class="row" style="margin-top:12px">
+                <button id="newClaudeFromDefault" class="btn primary">新增自定义配置</button>
+              </div>
+            </div>`;
+          document.getElementById("newClaudeFromDefault").onclick = () => {
+            state.selectedClaude = "new-claude";
+            renderAdmin();
+          };
+          return;
+        }
+
+        claudeDetail.innerHTML = `
+          <div class="card-head">
+            <h3 class="card-title">${profile.title}</h3>
+            <p class="card-desc">管理这套 Claude 连接配置。</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>配置名称</label>
+              <input id="editClaudeName" class="input" value="${profile.title}" />
+            </div>
+            <div class="grid-2" style="margin-top:12px">
+              <div class="field">
+                <label>端点地址</label>
+                <input id="editClaudeEndpoint" class="input" value="${profile.endpoint}" />
+              </div>
+              <div class="field">
+                <label>认证方式</label>
+                <input class="input" value="${profile.authMode}" readonly />
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>Token 状态</label>
+              <input class="input" value="${profile.tokenStatus}" readonly />
+            </div>
+            <div class="grid-2" style="margin-top:12px">
+              <div class="field">
+                <label>主模型</label>
+                <input id="editClaudeModel" class="input" value="${profile.model}" />
+              </div>
+              <div class="field">
+                <label>轻量模型</label>
+                <input id="editClaudeSmallModel" class="input" value="${profile.smallModel}" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button id="saveClaudeEdit" class="btn primary">保存配置</button>
+              <button id="copyClaudeProfile" class="btn ghost">复制一份</button>
+              <button id="deleteClaudeProfile" class="btn danger">删除配置</button>
+            </div>
+            <div id="editClaudeSlot" style="margin-top:10px"></div>
+          </div>`;
+
+        document.getElementById("saveClaudeEdit").onclick = () => {
+          profile.title = document.getElementById("editClaudeName").value.trim() || profile.title;
+          profile.endpoint = document.getElementById("editClaudeEndpoint").value.trim() || profile.endpoint;
+          profile.model = document.getElementById("editClaudeModel").value.trim() || profile.model;
+          profile.smallModel =
+            document.getElementById("editClaudeSmallModel").value.trim() || profile.smallModel;
+          document.getElementById("editClaudeSlot").innerHTML = `<div class="notice good">Claude 配置已保存。</div>`;
+          renderClaudeList();
+        };
+
+        document.getElementById("copyClaudeProfile").onclick = () => {
+          const copied = {
+            ...profile,
+            id: `copy-${Date.now()}`,
+            title: `${profile.title}（副本）`,
+          };
+          claudeProfiles.splice(claudeProfiles.length - 1, 0, copied);
+          state.selectedClaude = copied.id;
+          renderAdmin();
+        };
+
+        document.getElementById("deleteClaudeProfile").onclick = () => {
+          const index = claudeProfiles.findIndex((item) => item.id === profile.id);
+          if (index < 0) return;
+          claudeProfiles.splice(index, 1);
+          state.selectedClaude = "default";
+          renderAdmin();
+        };
+      }
+
+      function renderCodexList() {
+        codexList.innerHTML = codexProviders
+          .map((provider) => {
+            const active = provider.id === state.selectedCodex;
+            return `
+              <button class="robot-item ${active ? "active" : ""}" data-pid="${provider.id}">
+                <div class="robot-top">
+                  <p class="robot-name">${provider.title}</p>
+                  <span class="tag">${provider.tag}</span>
+                </div>
+                <p class="robot-id">${
+                  provider.isNew ? "创建一套新的 Codex Provider" : provider.endpoint
+                }</p>
+              </button>`;
+          })
+          .join("");
+
+        codexList.querySelectorAll(".robot-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedCodex = btn.dataset.pid;
+            renderAdmin();
+          });
+        });
+      }
+
+      function renderCodexDetail() {
+        const provider = codexProviders.find((item) => item.id === state.selectedCodex);
+        if (!provider) return;
+
+        if (provider.isNew) {
+          codexDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">新增 Codex Provider</h3>
+              <p class="card-desc">填写一套新的 Codex 连接配置。</p>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <label>名称</label>
+                <input id="newCodexName" class="input" placeholder="例如：研发代理" />
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>端点地址</label>
+                <input id="newCodexEndpoint" class="input" placeholder="例如：https://proxy.internal/v1" />
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>API Key</label>
+                <input id="newCodexKey" class="input" placeholder="请输入 API Key" />
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button id="saveCodexProvider" class="btn primary">保存配置</button>
+              </div>
+              <div id="newCodexSlot" style="margin-top:10px"></div>
+            </div>`;
+
+          document.getElementById("saveCodexProvider").onclick = () => {
+            const name = document.getElementById("newCodexName").value.trim();
+            const endpoint = document.getElementById("newCodexEndpoint").value.trim();
+            const key = document.getElementById("newCodexKey").value.trim();
+            const slot = document.getElementById("newCodexSlot");
+            if (!name || !endpoint || !key) {
+              slot.innerHTML = `<div class="notice bad">请填写完整的名称、端点地址和 API Key。</div>`;
+              return;
+            }
+            const created = {
+              id: `codex-${Date.now()}`,
+              title: name,
+              tag: "自定义",
+              builtIn: false,
+              endpoint,
+              keyStatus: "已保存 API Key",
+            };
+            codexProviders.splice(codexProviders.length - 1, 0, created);
+            state.selectedCodex = created.id;
+            renderAdmin();
+          };
+          return;
+        }
+
+        if (provider.builtIn) {
+          codexDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">${provider.title}</h3>
+              <p class="card-desc">使用这台机器当前可用的 Codex 设置。</p>
+            </div>
+            <div class="card-body">
+              <dl class="kv">
+                <dt>端点</dt><dd>${provider.endpoint}</dd>
+                <dt>API Key</dt><dd>${provider.keyStatus}</dd>
+              </dl>
+              <div class="row" style="margin-top:12px">
+                <button id="newCodexFromDefault" class="btn primary">新增自定义配置</button>
+              </div>
+            </div>`;
+          document.getElementById("newCodexFromDefault").onclick = () => {
+            state.selectedCodex = "new-codex";
+            renderAdmin();
+          };
+          return;
+        }
+
+        codexDetail.innerHTML = `
+          <div class="card-head">
+            <h3 class="card-title">${provider.title}</h3>
+            <p class="card-desc">管理这套 Codex 连接配置。</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>名称</label>
+              <input id="editCodexName" class="input" value="${provider.title}" />
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>端点地址</label>
+              <input id="editCodexEndpoint" class="input" value="${provider.endpoint}" />
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>API Key</label>
+              <input id="editCodexKey" class="input" placeholder="请输入 API Key" />
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button id="saveCodexEdit" class="btn primary">保存配置</button>
+              <button id="deleteCodexProvider" class="btn danger">删除配置</button>
+            </div>
+            <div id="editCodexSlot" style="margin-top:10px"></div>
+          </div>`;
+
+        document.getElementById("saveCodexEdit").onclick = () => {
+          const name = document.getElementById("editCodexName").value.trim();
+          const endpoint = document.getElementById("editCodexEndpoint").value.trim();
+          const key = document.getElementById("editCodexKey").value.trim();
+          if (!name || !endpoint || !key) {
+            document.getElementById("editCodexSlot").innerHTML =
+              `<div class="notice bad">请填写完整的名称、端点地址和 API Key。</div>`;
+            return;
+          }
+          provider.title = name;
+          provider.endpoint = endpoint;
+          provider.keyStatus = "已保存 API Key";
+          document.getElementById("editCodexSlot").innerHTML =
+            `<div class="notice good">Codex Provider 已保存。</div>`;
+          renderCodexList();
+        };
+
+        document.getElementById("deleteCodexProvider").onclick = () => {
+          const index = codexProviders.findIndex((item) => item.id === provider.id);
+          if (index < 0) return;
+          codexProviders.splice(index, 1);
+          state.selectedCodex = "default";
+          renderAdmin();
+        };
+      }
+
+      function openDeleteRobotModal(robotId) {
+        const robot = robots.find((item) => item.id === robotId);
+        if (!robot || robot.id === "new") return;
+        state.deleteTarget = robotId;
+        deleteRobotText.textContent = `删除后将移除“${robot.title}”，此操作不可恢复。`;
+        deleteRobotModal.classList.add("open");
+        deleteRobotModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeDeleteRobotModal() {
+        state.deleteTarget = null;
+        deleteRobotModal.classList.remove("open");
+        deleteRobotModal.setAttribute("aria-hidden", "true");
+      }
+
+      function confirmDeleteRobot() {
+        const target = state.deleteTarget;
+        if (!target) {
+          closeDeleteRobotModal();
+          return;
+        }
+        const index = robots.findIndex((item) => item.id === target);
+        if (index < 0) {
+          closeDeleteRobotModal();
+          return;
+        }
+        robots.splice(index, 1);
+        const fallback = robots.find((item) => item.id !== "new") || robots.find((item) => item.id === "new");
+        state.selectedRobot = fallback ? fallback.id : "";
+        state.eventStatus = "idle";
+        state.callbackStatus = "idle";
+        closeDeleteRobotModal();
+        renderAdmin();
+      }
+
+      function renderStorageAndIntegrations() {
+        document.getElementById("autoRunText").textContent = state.autoRunOn ? "当前已启用。" : "当前未启用。";
+        document.getElementById("autoRunToggle").textContent = state.autoRunOn ? "关闭自动运行" : "启用自动运行";
+        document.getElementById("vscodeText").textContent = state.vscodeReady ? "当前已接入。" : "当前未完成接入。";
+        document.getElementById("integrationHint").textContent = state.vscodeReady
+          ? "当前没有需要处理的集成异常。"
+          : "检测到 VS Code 集成未完成，请先修复。";
+        document.getElementById("previewStat").textContent = `${state.previewFiles} 个文件，约 ${state.previewSize}`;
+        document.getElementById("imageStat").textContent = `${state.imageFiles} 个文件，约 ${state.imageSize}`;
+        document.getElementById("logStat").textContent = `${state.logFiles} 个文件，约 ${state.logSize}`;
+      }
+
+      function bindActions() {
+        document.getElementById("autoRunToggle").onclick = () => {
+          state.autoRunOn = !state.autoRunOn;
+          renderAdmin();
+        };
+        document.getElementById("vscodeRepairBtn").onclick = () => {
+          state.vscodeReady = !state.vscodeReady;
+          renderAdmin();
+        };
+        document.getElementById("cleanPreviewBtn").onclick = () => {
+          state.previewFiles = Math.max(0, state.previewFiles - 68);
+          state.previewSize = state.previewFiles === 0 ? "0 MB" : "980 MB";
+          renderAdmin();
+        };
+        document.getElementById("cleanImageBtn").onclick = () => {
+          state.imageFiles = Math.max(0, state.imageFiles - 24);
+          state.imageSize = state.imageFiles === 0 ? "0 MB" : "300 MB";
+          renderAdmin();
+        };
+        document.getElementById("cleanLogBtn").onclick = () => {
+          state.logFiles = Math.max(0, state.logFiles - 70);
+          state.logSize = state.logFiles === 0 ? "0 MB" : "420 MB";
+          renderAdmin();
+        };
+      }
+
+      function renderAdmin() {
+        renderRobotList();
+        renderRobotDetail();
+        renderClaudeList();
+        renderClaudeDetail();
+        renderCodexList();
+        renderCodexDetail();
+        renderStorageAndIntegrations();
+        bindActions();
+      }
+
+      document.getElementById("cancelDeleteRobot").onclick = () => closeDeleteRobotModal();
+      document.getElementById("confirmDeleteRobot").onclick = () => confirmDeleteRobot();
+      deleteRobotModal.addEventListener("click", (event) => {
+        if (event.target === deleteRobotModal) closeDeleteRobotModal();
+      });
+
+      renderAdmin();
+    </script>
+  </body>
+</html>

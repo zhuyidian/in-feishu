@@ -1,0 +1,226 @@
+import { useId, useState, type MouseEvent, type PropsWithChildren, type ReactNode } from "react";
+import { BrandLogo } from "./BrandLogo";
+
+type ShellScaffoldProps = {
+  routeLabel: string;
+  subtitle: string;
+  railContent: ReactNode;
+  railToggleLabel: string;
+  railClassName?: string;
+  mainClassName?: string;
+  children: ReactNode;
+};
+
+export function ShellScaffold(props: ShellScaffoldProps) {
+  const { routeLabel, subtitle, railContent, railToggleLabel, railClassName, mainClassName, children } = props;
+  const [railOpen, setRailOpen] = useState(false);
+  const railBodyID = useId();
+
+  function handleRailBodyClick(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest("a,button")) {
+      return;
+    }
+    setRailOpen(false);
+  }
+
+  return (
+    <div className={`app-shell shell-scaffold${railOpen ? " rail-open" : ""}`}>
+      <aside className={`side-rail${railClassName ? ` ${railClassName}` : ""}`}>
+        <div className="shell-rail-header">
+          <div className="brand-lockup">
+            <BrandLogo className="brand-mark" />
+            <div>
+              <p className="brand-kicker">{routeLabel}</p>
+              <h1>Codex Remote</h1>
+            </div>
+          </div>
+          <button
+            className="shell-rail-toggle"
+            type="button"
+            aria-expanded={railOpen}
+            aria-controls={railBodyID}
+            onClick={() => setRailOpen((open) => !open)}
+          >
+            {railOpen ? `收起${railToggleLabel}` : `打开${railToggleLabel}`}
+          </button>
+        </div>
+        <div id={railBodyID} className="shell-rail-body" onClick={handleRailBodyClick}>
+          <p className="side-copy">{subtitle}</p>
+          {railContent}
+        </div>
+      </aside>
+      <main className={`main-stage${mainClassName ? ` ${mainClassName}` : ""}`}>{children}</main>
+    </div>
+  );
+}
+
+export function ShellFrame(props: {
+  routeLabel: string;
+  title: string;
+  subtitle: string;
+  nav: Array<{ label: string; href: string }>;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  const { routeLabel, title, subtitle, nav, actions, children } = props;
+  return (
+    <ShellScaffold
+      routeLabel={routeLabel}
+      subtitle={subtitle}
+      railToggleLabel="分区导航"
+      railContent={
+        <nav className="side-nav" aria-label="Page Sections">
+          {nav.map((item) => (
+            <a key={item.href} href={item.href}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      }
+    >
+        <header className="page-hero">
+          <div>
+            <p className="page-kicker">{routeLabel}</p>
+            <h2>{title}</h2>
+          </div>
+          {actions ? <div className="hero-actions">{actions}</div> : null}
+        </header>
+        {children}
+    </ShellScaffold>
+  );
+}
+
+export function Panel(props: PropsWithChildren<{ id?: string; title: string; description?: string; className?: string; actions?: ReactNode }>) {
+  const { id, title, description, className, actions, children } = props;
+  return (
+    <section id={id} className={`panel${className ? ` ${className}` : ""}`}>
+      <div className="panel-head">
+        <div>
+          <h3>{title}</h3>
+          {description ? <p>{description}</p> : null}
+        </div>
+        {actions ? <div className="panel-actions">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function StatGrid(props: PropsWithChildren) {
+  return <div className="stat-grid">{props.children}</div>;
+}
+
+export function StatCard(props: { label: string; value: string | number; detail?: string; tone?: "default" | "accent" | "warn" }) {
+  return (
+    <div className={`stat-card${props.tone ? ` ${props.tone}` : ""}`}>
+      <p>{props.label}</p>
+      <strong>{props.value}</strong>
+      {props.detail ? <span>{props.detail}</span> : null}
+    </div>
+  );
+}
+
+export function StatusBadge(props: { value: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
+  return <span className={`status-badge ${props.tone ?? "neutral"}`}>{props.value}</span>;
+}
+
+export function DefinitionList(props: { items: Array<{ label: string; value: ReactNode }> }) {
+  return (
+    <dl className="definition-list">
+      {props.items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export function DataList(props: { items: Array<{ title: string; meta?: string; detail?: string; tone?: "neutral" | "good" | "warn" | "danger" }> }) {
+  return (
+    <div className="data-list">
+      {props.items.map((item) => (
+        <article key={`${item.title}-${item.meta ?? ""}`} className="data-row">
+          <div>
+            <h4>{item.title}</h4>
+            {item.detail ? <p>{item.detail}</p> : null}
+          </div>
+          <div className="data-meta">
+            {item.meta ? <span>{item.meta}</span> : null}
+            {item.tone ? <StatusBadge value={toneLabel(item.tone)} tone={item.tone} /> : null}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export function LoadingState(props: { title: string; description?: string }) {
+  return (
+    <Panel title={props.title} description={props.description}>
+      <div className="empty-state">
+        <div className="loading-dot" />
+        <span>正在读取最新状态</span>
+      </div>
+    </Panel>
+  );
+}
+
+export function ErrorState(props: { title: string; description?: string; detail: string }) {
+  return (
+    <Panel title={props.title} description={props.description}>
+      <div className="empty-state error">
+        <strong>加载失败</strong>
+        <p>{props.detail}</p>
+      </div>
+    </Panel>
+  );
+}
+
+export function BlockingModal(props: {
+  open: boolean;
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+}) {
+  if (!props.open) {
+    return null;
+  }
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="blocking-modal-title">
+        <p className="page-kicker">Blocking Error</p>
+        <h3 id="blocking-modal-title">{props.title}</h3>
+        <p>{props.message}</p>
+        {props.detail ? (
+          <details className="modal-detail">
+            <summary>查看技术详情</summary>
+            <pre>{props.detail}</pre>
+          </details>
+        ) : null}
+        <div className="modal-actions">
+          <button className="primary-button" type="button" onClick={props.onConfirm}>
+            {props.confirmLabel ?? "我知道了"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function toneLabel(tone: "neutral" | "good" | "warn" | "danger"): string {
+  switch (tone) {
+    case "good":
+      return "Healthy";
+    case "warn":
+      return "Attention";
+    case "danger":
+      return "Blocked";
+    default:
+      return "Info";
+  }
+}

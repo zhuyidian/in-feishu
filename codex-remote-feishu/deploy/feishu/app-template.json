@@ -1,0 +1,145 @@
+{
+  "name": "codex-remote-feishu",
+  "description": "Template for configuring the Feishu app used by Codex Remote Feishu.",
+  "bot": {
+    "name": "Codex Remote",
+    "menus": [
+      {
+        "key": "menu",
+        "name": "命令菜单",
+        "description": "打开阶段感知的命令菜单首页。"
+      },
+      {
+        "key": "stop",
+        "name": "停止推理",
+        "description": "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"
+      },
+      {
+        "key": "steerall",
+        "name": "全部加速",
+        "description": "把当前队列里可并入本轮执行的输入一次性并入当前 running turn。"
+      },
+      {
+        "key": "new",
+        "name": "新建会话",
+        "description": "仅 headless 模式可用：准备一个新会话，下一条消息会作为首条输入。"
+      },
+      {
+        "key": "reasoning",
+        "name": "推理强度",
+        "description": "打开推理强度参数卡；如果知道完整 key，也可直接使用 `reasoning_high` 这类直达入口。"
+      },
+      {
+        "key": "model",
+        "name": "使用模型",
+        "description": "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.4` 这类直达入口。"
+      },
+      {
+        "key": "access",
+        "name": "执行权限",
+        "description": "打开执行权限参数卡；如果知道完整 key，也可直接使用 `access_confirm` 这类直达入口。"
+      }
+    ]
+  },
+  "message_types": [
+    "text",
+    "image"
+  ],
+  "scopes_import": {
+    "scopes": {
+      "tenant": [
+        "drive:drive",
+        "base:app:create",
+        "bitable:app",
+        "im:datasync.feed_card.time_sensitive:write",
+        "im:message",
+        "im:message.group_at_msg:readonly",
+        "im:message.p2p_msg:readonly",
+        "im:message.reactions:read",
+        "im:message.reactions:write_only",
+        "im:message:send_as_bot",
+        "im:resource"
+      ],
+      "user": []
+    }
+  },
+  "event_subscriptions": [
+    {
+      "event": "im.message.receive_v1",
+      "purpose": "接收飞书中的文本和图片消息。"
+    },
+    {
+      "event": "im.message.recalled_v1",
+      "purpose": "用户撤回尚未执行的输入时，取消排队消息或 staged image。"
+    },
+    {
+      "event": "im.message.reaction.created_v1",
+      "purpose": "用户给 queued 文本加 ThumbsUp 时，可把它升级成对当前执行回复的跟进。"
+    },
+    {
+      "event": "im.message.reaction.deleted_v1",
+      "purpose": "用户撤销消息 reaction 时，同步撤销对应的反馈动作。"
+    },
+    {
+      "event": "application.bot.menu_v6",
+      "purpose": "处理机器人静态菜单里的阶段入口和高频快捷键，例如 menu/stop/steerall/new/reasoning/model/access。"
+    }
+  ],
+  "callback_subscriptions": [
+    {
+      "callback": "card.action.trigger",
+      "purpose": "通过飞书回调长连接处理消息卡片里的 attach / 切换会话按钮、命令菜单导航、参数卡和 approval request 交互。"
+    }
+  ],
+  "permissions_checklist": [
+    {
+      "area": "机器人能力",
+      "items": [
+        "允许机器人接收用户发送的文本消息",
+        "允许机器人接收用户发送的图片消息",
+        "允许机器人发送文本消息",
+        "允许机器人发送卡片消息",
+        "允许机器人添加和移除消息 reaction"
+      ]
+    },
+    {
+      "area": "事件订阅",
+      "items": [
+        "点击“订阅方式”，默认就是“长连接”，点击保存。",
+        "开启 P2P 消息接收事件",
+        "开启消息撤回事件",
+        "开启消息 reaction 创建事件",
+        "开启机器人菜单点击事件"
+      ]
+    },
+    {
+      "area": "回调配置",
+      "items": [
+        "点击“回调订阅方式”，选择“长连接”，点击保存。",
+        "确认 card.action.trigger 回调已经配置完成。",
+        "当前版本不需要填写 HTTP 回调 URL。"
+      ]
+    },
+    {
+      "area": "单聊权限",
+      "items": [
+        "如果需要和机器人单聊，额外开通 P2P 消息只读权限。",
+        "如果需要在单聊列表里标记“等待你输入”的机器人，额外开通 im:datasync.feed_card.time_sensitive:write。"
+      ]
+    },
+    {
+      "area": "Markdown 预览权限",
+      "items": [
+        "如果要启用 assistant 最终回复里的本地 .md 预览，推荐直接开通 drive:drive。",
+        "当前实现会实际创建云空间目录、上传文件、查询文件链接，并给目录和文件增加协作者权限。",
+        "如果不开通这部分权限，机器人主功能仍可用，但 .md 链接不会变成飞书预览链接。"
+      ]
+    }
+  ],
+  "notes": [
+    "此文件是项目模板，不保证可直接导入飞书控制台。",
+    "请按 deploy/feishu/README.md 的说明，把这里的菜单、事件和权限逐项配置到你的自建应用。",
+    "WebSetup 页面里的推荐菜单和飞书里的 /help 使用同一套命令定义。",
+    "当前 .md 预览默认上传到应用云空间目录 Codex Remote Previews/，并按会话给用户或群授权。"
+  ]
+}

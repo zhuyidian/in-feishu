@@ -1,0 +1,138 @@
+name: Dev Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to publish as dev-latest. Defaults to master.
+        required: false
+        default: master
+        type: string
+      artifact_name:
+        description: Optional prebuilt artifact name from the caller workflow
+        required: false
+        default: ""
+        type: string
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-release
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve source ref
+        id: source
+        run: |
+          ref='${{ inputs.ref }}'
+          if [[ -z "${ref}" ]]; then
+            ref='master'
+          fi
+          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.source.outputs.ref }}
+
+      - name: Setup Node.js
+        if: ${{ inputs.artifact_name == '' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          commit="$(git rev-parse HEAD)"
+          short_commit="$(git rev-parse --short=12 "${commit}")"
+          built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          version="dev-${short_commit}"
+          echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+          echo "short_commit=${short_commit}" >> "${GITHUB_OUTPUT}"
+          echo "built_at=${built_at}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install web dependencies
+        if: ${{ inputs.artifact_name == '' }}
+        working-directory: web
+        run: npm ci
+
+      - name: Build web
+        if: ${{ inputs.artifact_name == '' }}
+        working-directory: web
+        run: npm run build
+
+      - name: Download prebuilt artifacts
+        if: ${{ inputs.artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: dist
+
+      - name: Build artifacts
+        if: ${{ inputs.artifact_name == '' }}
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: dev
+          CODEX_REMOTE_PACKAGE_VERSION_LABEL: dev
+        run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}" dist --jobs 5 --skip-admin-ui-build
+
+      - name: Build dev manifest
+        env:
+          CODEX_REMOTE_DEV_VERSION: ${{ steps.meta.outputs.version }}
+          CODEX_REMOTE_DEV_COMMIT: ${{ steps.meta.outputs.commit }}
+          CODEX_REMOTE_DEV_SHORT_COMMIT: ${{ steps.meta.outputs.short_commit }}
+          CODEX_REMOTE_DEV_BUILT_AT: ${{ steps.meta.outputs.built_at }}
+        run: bash scripts/release/build-dev-manifest.sh dist dist/dev-latest.json
+
+      - name: Generate release notes
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          BUILT_AT: ${{ steps.meta.outputs.built_at }}
+        run: bash scripts/release/dev-release-notes.sh > release-notes.md
+
+      - name: Update dev-latest tag
+        run: |
+          git tag -f dev-latest "${{ steps.meta.outputs.commit }}"
+          git push origin refs/tags/dev-latest --force
+
+      - name: Create or update dev-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view dev-latest >/dev/null 2>&1; then
+            gh release edit dev-latest \
+              --title dev-latest \
+              --notes-file release-notes.md
+          else
+            gh release create dev-latest \
+              --title dev-latest \
+              --notes-file release-notes.md \
+              --target "${{ steps.meta.outputs.commit }}" \
+              --prerelease
+          fi
+          gh release upload dev-latest dist/* --clobber

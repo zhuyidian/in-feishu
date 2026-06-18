@@ -1,0 +1,8 @@
+.tools/
+.codex-remote/
+
+codex-remote-feishu/bin/
+codex-remote-feishu/web/node_modules/
+codex-remote-feishu/web/.vite/
+codex-remote-feishu/.env
+codex-remote-feishu/*.log

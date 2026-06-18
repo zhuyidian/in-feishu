@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue 编排护栏"
+  short_description: "GitHub issue 整形、拆分、推进与收尾工作流"
+  default_prompt: "Use $issue-workflow-guardrail to shape, orchestrate, implement, and close a GitHub issue in this repository through the fixed prepare/lint/finish workflow."
