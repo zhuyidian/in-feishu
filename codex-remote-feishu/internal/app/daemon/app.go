@@ -27,6 +27,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -210,6 +211,11 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gatewayApplyTimeout:         30 * time.Second,
 		finalPreviewTimeout:         90 * time.Second,
 		commandAnchorRecallDelay:    8 * time.Second,
+	}
+	if reader, ok := gateway.(interface {
+		ListGroupSummaryMessages(context.Context, string, string, string, time.Time, time.Time, int) ([]state.GroupSummaryMessageRecord, error)
+	}); ok {
+		app.service.SetGroupSummaryHistoryReader(reader)
 	}
 	app.codexUpgradeRuntime.Inspect = func(ctx context.Context, opts codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
 		return codexupgrade.Inspect(ctx, opts), nil

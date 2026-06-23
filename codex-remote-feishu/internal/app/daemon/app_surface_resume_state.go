@@ -401,7 +401,15 @@ func (a *App) syncSurfaceResumeRecoveryStateLocked() {
 		}
 		current := a.surfaceResumeRuntime.recovery[surfaceID]
 		if current == nil || !surfaceresume.SameEntryContent(current.Entry, entry) {
-			a.surfaceResumeRuntime.recovery[surfaceID] = &surfaceResumeRecoveryState{Entry: entry}
+			next := &surfaceResumeRecoveryState{Entry: entry}
+			if current != nil && sameSurfaceResumeRecoveryAttempt(current.Entry, entry) {
+				next.NextAttemptAt = current.NextAttemptAt
+				next.LastAttemptAt = current.LastAttemptAt
+				next.LastFailureCode = current.LastFailureCode
+				next.LastNoticeAt = current.LastNoticeAt
+				next.LastNoticeCode = current.LastNoticeCode
+			}
+			a.surfaceResumeRuntime.recovery[surfaceID] = next
 			continue
 		}
 		current.Entry = entry
@@ -411,6 +419,23 @@ func (a *App) syncSurfaceResumeRecoveryStateLocked() {
 			delete(a.surfaceResumeRuntime.recovery, surfaceID)
 		}
 	}
+}
+
+func sameSurfaceResumeRecoveryAttempt(left, right surfaceresume.Entry) bool {
+	return strings.TrimSpace(left.SurfaceSessionID) == strings.TrimSpace(right.SurfaceSessionID) &&
+		strings.TrimSpace(left.GatewayID) == strings.TrimSpace(right.GatewayID) &&
+		strings.TrimSpace(left.ChatID) == strings.TrimSpace(right.ChatID) &&
+		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
+		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
+		strings.TrimSpace(left.Backend) == strings.TrimSpace(right.Backend) &&
+		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
+		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
+		strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
+		strings.TrimSpace(left.ResumeThreadTitle) == strings.TrimSpace(right.ResumeThreadTitle) &&
+		strings.TrimSpace(left.ResumeThreadCWD) == strings.TrimSpace(right.ResumeThreadCWD) &&
+		strings.TrimSpace(left.ResumeWorkspaceKey) == strings.TrimSpace(right.ResumeWorkspaceKey) &&
+		strings.TrimSpace(left.ResumeRouteMode) == strings.TrimSpace(right.ResumeRouteMode) &&
+		left.ResumeHeadless == right.ResumeHeadless
 }
 
 func surfaceResumeEntryNeedsRecovery(entry surfaceresume.Entry) bool {
@@ -458,8 +483,13 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 			ResumeHeadless:   recovery.Entry.ResumeHeadless,
 		}, allowMissingTargetFailure)
 		switch result.Status {
-		case orchestrator.SurfaceResumeStatusStarting, orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
+		case orchestrator.SurfaceResumeStatusStarting:
+			a.setSurfaceResumeLaunchWaitLocked(surfaceID, now)
+			events = append(events, restoreEvents...)
+			updatedSurfaceIDs = append(updatedSurfaceIDs, surfaceID)
+		case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
 			a.clearSurfaceResumeBackoffLocked(surfaceID)
+			a.clearSurfaceResumeNoticeStateLocked(surfaceID)
 			events = append(events, restoreEvents...)
 			updatedSurfaceIDs = append(updatedSurfaceIDs, surfaceID)
 		case orchestrator.SurfaceResumeStatusFailed:
@@ -506,6 +536,7 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Ev
 		switch result.Status {
 		case orchestrator.SurfaceResumeStatusInstanceAttached:
 			a.clearSurfaceResumeBackoffLocked(surfaceID)
+			a.clearSurfaceResumeNoticeStateLocked(surfaceID)
 			events = append(events, restoreEvents...)
 			updatedSurfaceIDs = append(updatedSurfaceIDs, surfaceID)
 		case orchestrator.SurfaceResumeStatusFailed:
@@ -605,6 +636,29 @@ func (a *App) clearSurfaceResumeBackoffLocked(surfaceID string) {
 	recovery.LastFailureCode = ""
 }
 
+func (a *App) clearSurfaceResumeNoticeStateLocked(surfaceID string) {
+	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(surfaceID)]
+	if recovery == nil {
+		return
+	}
+	recovery.LastNoticeAt = time.Time{}
+	recovery.LastNoticeCode = ""
+}
+
+func (a *App) setSurfaceResumeLaunchWaitLocked(surfaceID string, now time.Time) {
+	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(surfaceID)]
+	if recovery == nil {
+		return
+	}
+	nextAttemptAt := now.Add(surfaceResumeRetryBackoff)
+	if snapshot := a.service.SurfaceSnapshot(surfaceID); snapshot != nil && !snapshot.PendingHeadless.ExpiresAt.IsZero() {
+		nextAttemptAt = snapshot.PendingHeadless.ExpiresAt
+	}
+	recovery.LastAttemptAt = now
+	recovery.NextAttemptAt = nextAttemptAt
+	recovery.LastFailureCode = ""
+}
+
 func (a *App) setSurfaceResumeBackoffLocked(surfaceID, code string, now time.Time) {
 	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(surfaceID)]
 	if recovery == nil {
@@ -613,6 +667,50 @@ func (a *App) setSurfaceResumeBackoffLocked(surfaceID, code string, now time.Tim
 	recovery.LastAttemptAt = now
 	recovery.NextAttemptAt = now.Add(surfaceResumeRetryBackoff)
 	recovery.LastFailureCode = strings.TrimSpace(code)
+}
+
+func (a *App) shouldSuppressSurfaceResumeFailureNoticeLocked(event eventcontract.Event) bool {
+	if event.Notice == nil || !isSurfaceResumeFailureNoticeCode(event.Notice.Code) {
+		return false
+	}
+	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(event.SurfaceSessionID)]
+	if recovery == nil {
+		return false
+	}
+	code := strings.TrimSpace(event.Notice.Code)
+	return code != "" && recovery.LastNoticeCode == code && !recovery.LastNoticeAt.IsZero()
+}
+
+func (a *App) recordSurfaceResumeFailureNoticeLocked(event eventcontract.Event, deliveredAt time.Time) {
+	if event.Notice == nil || !isSurfaceResumeFailureNoticeCode(event.Notice.Code) {
+		return
+	}
+	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(event.SurfaceSessionID)]
+	if recovery == nil {
+		return
+	}
+	recovery.LastNoticeAt = deliveredAt
+	recovery.LastNoticeCode = strings.TrimSpace(event.Notice.Code)
+}
+
+func isSurfaceResumeFailureNoticeCode(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "headless_restore_workspace_busy",
+		"headless_restore_thread_busy",
+		"headless_restore_thread_not_found",
+		"headless_restore_thread_cwd_missing",
+		"headless_restore_start_failed",
+		"headless_restore_start_timeout",
+		"surface_resume_workspace_busy",
+		"surface_resume_workspace_instance_busy",
+		"surface_resume_thread_busy",
+		"surface_resume_target_not_found",
+		"surface_resume_instance_busy",
+		"surface_resume_instance_not_found":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *App) shouldDeferHeadlessResumeUntilInitialRefreshLocked(entry surfaceresume.Entry, allowMissingTargetFailure bool) bool {
@@ -640,7 +738,9 @@ func (a *App) recordManagedHeadlessResumeOutcomeEventsLocked(events []eventcontr
 		switch strings.TrimSpace(event.Notice.Code) {
 		case "headless_restore_attached":
 			a.clearSurfaceResumeBackoffLocked(event.SurfaceSessionID)
-		case "headless_restore_thread_busy",
+			a.clearSurfaceResumeNoticeStateLocked(event.SurfaceSessionID)
+		case "headless_restore_workspace_busy",
+			"headless_restore_thread_busy",
 			"headless_restore_thread_not_found",
 			"headless_restore_thread_cwd_missing",
 			"headless_restore_start_failed",

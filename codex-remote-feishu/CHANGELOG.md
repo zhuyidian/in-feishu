@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.7.0
+
+### Group summary sync
+
+- Added Feishu group history sync for `/summary sync today`, `/summary sync 24h`, and `/summary sync 200`.
+- Added cached group summaries for `/summary today` and `/summary topic <keyword>`, while keeping existing `/summary 1h` and `/summary 50` behavior.
+- Documented the required Feishu permission `im:message.group_msg` for group history reads.
+
+### Resume notice hardening
+
+- Reduced repeated restore-failure noise when a workspace is already controlled by another Feishu session, while preserving the resume retry state.
+
 ## v1.6.0
 
 覆盖范围：自 `v1.5.0` 以来的 301 个提交（按提交统计，不按 issue）。

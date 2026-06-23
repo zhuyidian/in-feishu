@@ -84,6 +84,7 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - `drive:drive`
 - `im:datasync.feed_card.time_sensitive:write`
 - `im:message`
+- `im:message.group_msg`
 - `im:message.group_at_msg:readonly`
 - `im:message.p2p_msg:readonly`
 - `im:message.reactions:read`

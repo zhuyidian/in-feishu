@@ -16,6 +16,8 @@ type surfaceResumeRecoveryState struct {
 	NextAttemptAt   time.Time
 	LastAttemptAt   time.Time
 	LastFailureCode string
+	LastNoticeAt    time.Time
+	LastNoticeCode  string
 }
 
 type vscodeMigrationFlowRecord struct {

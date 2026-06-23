@@ -44,6 +44,37 @@ func TestGlobalRuntimeNoticeSuppressionForTransportDegraded(t *testing.T) {
 	}
 }
 
+func TestGlobalRuntimeNoticeSuppressionForSurfaceResumeIsLongWindow(t *testing.T) {
+	app := New(":0", ":0", nil, serverIdentityForTest())
+	event := eventcontract.Event{
+		Kind:             eventcontract.KindNotice,
+		SurfaceSessionID: "surface-1",
+		Notice: &control.Notice{
+			Code:             "surface_resume_workspace_busy",
+			Text:             "之前的工作区当前被其他飞书会话接管，暂时无法恢复。",
+			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
+			DeliveryFamily:   control.NoticeDeliveryFamilySurfaceResume,
+			DeliveryDedupKey: "surface_resume_workspace_busy",
+		},
+	}
+
+	normalized, ok := normalizeGlobalRuntimeNoticeEvent(event)
+	if !ok {
+		t.Fatalf("expected global runtime notice")
+	}
+	now := time.Now()
+	if app.shouldSuppressGlobalRuntimeNoticeLocked(normalized, now) {
+		t.Fatalf("expected first surface resume notice not to be suppressed")
+	}
+	app.recordGlobalRuntimeNoticeLocked(normalized, now)
+	if !app.shouldSuppressGlobalRuntimeNoticeLocked(normalized, now.Add(3*time.Second)) {
+		t.Fatalf("expected repeated surface resume notice after 3s to be suppressed")
+	}
+	if app.shouldSuppressGlobalRuntimeNoticeLocked(normalized, now.Add(31*time.Minute)) {
+		t.Fatalf("expected surface resume notice after long throttle window to pass")
+	}
+}
+
 func TestQueueGlobalRuntimeNoticeDedupesPendingEvents(t *testing.T) {
 	app := New(":0", ":0", nil, serverIdentityForTest())
 	event := eventcontract.Event{

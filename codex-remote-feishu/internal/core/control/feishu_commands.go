@@ -16,6 +16,7 @@ const (
 	FeishuCommandUseAll               = "useall"
 	FeishuCommandNew                  = "new"
 	FeishuCommandHistory              = "history"
+	FeishuCommandSummary              = "summary"
 	FeishuCommandReview               = "review"
 	FeishuCommandSendFile             = "sendfile"
 	FeishuCommandFollow               = "follow"
@@ -215,6 +216,29 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 		menuExact: []feishuCommandMatch{
 			{alias: "history", action: Action{Kind: ActionShowHistory, Text: "/history"}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandSummary,
+			GroupID:          FeishuCommandGroupCommonTools,
+			Title:            "\u7fa4\u6d88\u606f\u6458\u8981",
+			CanonicalSlash:   "/summary",
+			CanonicalMenuKey: "summary",
+			ArgumentKind:     FeishuCommandArgumentText,
+			ArgumentFormHint: "sync today",
+			ArgumentFormNote: "\u8f93\u5165 sync today / sync 24h / sync 200 / today / topic \u5173\u952e\u8bcd\u3002",
+			ArgumentSubmit:   "\u6267\u884c",
+			Description:      "\u540c\u6b65\u5e76\u6c47\u603b\u5f53\u524d\u7fa4\u6d88\u606f\uff1b\u652f\u6301\u4eca\u5929\u3001\u8fd124\u5c0f\u65f6\u3001\u6700\u8fd1200\u6761\u548c\u5173\u952e\u8bcd\u6458\u8981\u3002",
+			Examples:         []string{"/summary sync today", "/summary sync 24h", "/summary sync 200", "/summary today", "/summary topic \u5173\u952e\u8bcd"},
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/summary", kind: ActionGroupSummaryCommand},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "summary", action: Action{Kind: ActionGroupSummaryCommand, Text: "/summary"}},
 		},
 	},
 	reviewCommandSpec(),

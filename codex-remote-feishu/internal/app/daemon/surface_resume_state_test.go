@@ -1413,6 +1413,71 @@ func TestDaemonHeadlessResumePassesStableWorkspaceRootToLaunch(t *testing.T) {
 	}
 }
 
+func TestDaemonHeadlessRestoreFailureNoticeIsOneShotAcrossRetries(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "恢复登录流程",
+		ResumeThreadCWD:    "/data/dl/repo",
+		ResumeWorkspaceKey: "/data/dl/repo",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	app.stopProcess = func(int, time.Duration) error { return nil }
+	launches := 0
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches++
+		return 20000 + launches, nil
+	}
+
+	base := time.Now().UTC()
+	app.onTick(context.Background(), base)
+	first := app.service.SurfaceSnapshot("surface-1")
+	if first == nil || first.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected first auto-restore to start pending headless, got %#v", first)
+	}
+	if launches != 1 {
+		t.Fatalf("expected one first launch, got %d", launches)
+	}
+
+	app.onTick(context.Background(), first.PendingHeadless.ExpiresAt)
+	if got := countRestoreFailureCards(gateway.operations); got != 1 {
+		t.Fatalf("expected first restore timeout to emit one failure card, got %d ops=%#v", got, gateway.operations)
+	}
+
+	app.onTick(context.Background(), first.PendingHeadless.ExpiresAt.Add(surfaceResumeRetryBackoff+time.Second))
+	second := app.service.SurfaceSnapshot("surface-1")
+	if second == nil || second.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected retry auto-restore to start pending headless, got %#v", second)
+	}
+	if launches != 2 {
+		t.Fatalf("expected second launch after backoff, got %d", launches)
+	}
+
+	app.onTick(context.Background(), second.PendingHeadless.ExpiresAt)
+	if got := countRestoreFailureCards(gateway.operations); got != 1 {
+		t.Fatalf("expected repeated restore timeout to keep one failure card, got %d ops=%#v", got, gateway.operations)
+	}
+}
+
 func TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh(t *testing.T) {
 	t.Parallel()
 
@@ -1476,6 +1541,16 @@ func TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh(t *testing.T) {
 	if gateway.operations[1].CardTitle != "工作区准备失败" {
 		t.Fatalf("expected workspace prepare failure notice second, got %#v", gateway.operations[1])
 	}
+}
+
+func countRestoreFailureCards(operations []feishu.Operation) int {
+	count := 0
+	for _, operation := range operations {
+		if operation.CardTitle == "恢复失败" {
+			count++
+		}
+	}
+	return count
 }
 
 func seedVSCodeResumeInstance(app *App, instanceID, threadID string) {

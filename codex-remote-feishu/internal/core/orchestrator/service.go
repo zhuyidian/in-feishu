@@ -45,6 +45,7 @@ type Service struct {
 	pickers                   *servicePickerRuntime
 	catalog                   *serviceCatalogRuntime
 	progress                  *serviceProgressRuntime
+	groupSummaryHistoryReader GroupSummaryHistoryReader
 }
 
 type itemBuffer struct {
@@ -316,10 +317,13 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	s.noteAutoWhipAction(surface, action)
 	switch action.Kind {
 	case control.ActionTextMessage:
+		s.recordGroupSummaryText(surface, action)
 		s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindText)
 	case control.ActionImageMessage:
+		s.recordGroupSummaryAttachment(surface, action, state.SurfaceMessageKindImage, "[图片]")
 		s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindImage)
 	case control.ActionFileMessage:
+		s.recordGroupSummaryAttachment(surface, action, state.SurfaceMessageKindCard, "[文件] "+action.FileName)
 		s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindCard)
 	}
 	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
@@ -377,6 +381,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = []eventcontract.Event{s.helpTerminalPageEvent(surface)}
 	case control.ActionShowHistory:
 		events = s.openThreadHistory(surface, action.MessageID, action.IsCardAction())
+	case control.ActionGroupSummaryCommand:
+		events = s.handleGroupSummaryCommand(surface, action)
 	case control.ActionUpgradeOwnerFlow:
 		ownerFlow := action.OwnerFlow
 		if ownerFlow == nil {

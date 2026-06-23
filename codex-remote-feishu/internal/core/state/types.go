@@ -158,6 +158,10 @@ const (
 	SurfaceMessageKindImage SurfaceMessageKind = "image"
 )
 
+const (
+	GroupSummaryMaxMessages = 1000
+)
+
 type Root struct {
 	Instances                       map[string]*InstanceRecord
 	Surfaces                        map[string]*SurfaceConsoleRecord
@@ -289,11 +293,27 @@ type SurfaceConsoleRecord struct {
 	RecentFinalCards     []*FinalCardRecord
 	SurfaceMessageSeq    int
 	SurfaceMessages      map[string]*SurfaceMessageRecord
+	GroupSummary         GroupSummaryRecord
 	LastThreadHistory    *agentproto.ThreadHistoryRecord
 	LastSelection        *SelectionAnnouncementRecord
 	AutoWhip             AutoWhipRuntimeRecord
 	AutoContinue         AutoContinueRuntimeRecord
 	ReviewSession        *ReviewSessionRecord
+}
+
+type GroupSummaryRecord struct {
+	Enabled   bool
+	EnabledAt time.Time
+	Messages  []GroupSummaryMessageRecord
+}
+
+type GroupSummaryMessageRecord struct {
+	MessageID   string
+	ActorUserID string
+	Text        string
+	MessageKind SurfaceMessageKind
+	CreatedAt   time.Time
+	RecordedAt  time.Time
 }
 
 type ReviewSessionPhase string

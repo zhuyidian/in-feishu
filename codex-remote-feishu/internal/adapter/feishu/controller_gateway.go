@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func (c *MultiGatewayController) Start(ctx context.Context, handler ActionHandler) error {
@@ -187,6 +188,30 @@ func (c *MultiGatewayController) ReadDriveFileComments(ctx context.Context, req 
 		result.GatewayID = resolution.GatewayID
 	}
 	return result, nil
+}
+
+func (c *MultiGatewayController) ListGroupSummaryMessages(ctx context.Context, gatewayID, surfaceSessionID, chatID string, start, end time.Time, limit int) ([]state.GroupSummaryMessageRecord, error) {
+	resolution := c.resolveGatewayTarget(eventcontract.TargetRef{
+		GatewayID:        gatewayID,
+		SurfaceSessionID: surfaceSessionID,
+		SelectionPolicy:  eventcontract.GatewaySelectionAllowSoleGatewayFallback,
+		FailurePolicy:    eventcontract.GatewayFailureError,
+	}, gatewayTargetRequireRuntime)
+	if !resolution.ok() {
+		return nil, resolution.errorf("list group messages failed")
+	}
+	reader, ok := resolution.Worker.runtime.(interface {
+		ListGroupSummaryMessages(context.Context, string, string, string, time.Time, time.Time, int) ([]state.GroupSummaryMessageRecord, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("list group messages failed: gateway %s does not support group history", resolution.GatewayID)
+	}
+	records, err := reader.ListGroupSummaryMessages(ctx, resolution.GatewayID, surfaceSessionID, chatID, start, end, limit)
+	if err != nil {
+		c.updateWorkerError(resolution.GatewayID, err)
+		return nil, err
+	}
+	return records, nil
 }
 
 func (c *MultiGatewayController) ClearGrantedPermissionBlocks(gatewayID string, scopes []AppScopeStatus) {

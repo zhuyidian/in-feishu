@@ -26,6 +26,9 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 	turnAttention := a.planTurnAttentionAnnotationsLocked(events)
 	for index, event := range events {
 		event = event.Normalized()
+		if a.shouldSuppressSurfaceResumeFailureNoticeLocked(event) {
+			continue
+		}
 		if event.DaemonCommand != nil {
 			a.mu.Unlock()
 			followup := a.handleDaemonCommand(*event.DaemonCommand)
@@ -138,6 +141,7 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 			continue
 		}
 		deliveredAt := time.Now()
+		a.recordSurfaceResumeFailureNoticeLocked(event, deliveredAt)
 		if isGlobalRuntimeNotice {
 			a.recordGlobalRuntimeNoticeLocked(event, deliveredAt)
 		}

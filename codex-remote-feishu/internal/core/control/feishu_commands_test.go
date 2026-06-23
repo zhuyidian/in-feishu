@@ -21,6 +21,21 @@ func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesSummaryCommand(t *testing.T) {
+	for _, input := range []string{"/summary", "/summary enable", "/summary today", "/summary topic 发布计划"} {
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionGroupSummaryCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionGroupSummaryCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
 func TestParseFeishuTextActionRecognizesAdminRootCommand(t *testing.T) {
 	action, ok := ParseFeishuTextActionWithoutCatalog("/admin")
 	if !ok {

@@ -41,8 +41,9 @@ func globalRuntimeNoticeThrottleWindow(event eventcontract.Event) time.Duration 
 	}
 	switch event.Notice.DeliveryFamily {
 	case control.NoticeDeliveryFamilySurfaceResume,
-		control.NoticeDeliveryFamilyVSCodeResume,
-		control.NoticeDeliveryFamilyVSCodeOpenPrompt:
+		control.NoticeDeliveryFamilyVSCodeResume:
+		return 30 * time.Minute
+	case control.NoticeDeliveryFamilyVSCodeOpenPrompt:
 		return 2 * time.Second
 	case control.NoticeDeliveryFamilyTransportDegraded,
 		control.NoticeDeliveryFamilyGatewayApplyFailure:
