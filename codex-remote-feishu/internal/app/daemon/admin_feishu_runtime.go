@@ -91,6 +91,7 @@ func buildFeishuAppSummary(gatewayID string, persisted config.FeishuAppConfig, r
 		ID:              gatewayID,
 		Name:            firstNonEmpty(strings.TrimSpace(runtime.Name), strings.TrimSpace(persisted.Name), gatewayID),
 		AppID:           firstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID)),
+		BotOpenID:       firstNonEmpty(strings.TrimSpace(runtime.BotOpenID), strings.TrimSpace(persisted.BotOpenID)),
 		ConsoleLinks:    buildFeishuAppConsoleLinks(firstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID))),
 		HasSecret:       strings.TrimSpace(firstNonEmpty(strings.TrimSpace(runtime.AppSecret), strings.TrimSpace(persisted.AppSecret))) != "",
 		Enabled:         runtime.Enabled == nil || *runtime.Enabled,

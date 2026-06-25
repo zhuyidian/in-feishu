@@ -275,6 +275,7 @@ build:
 			Name:                  strings.TrimSpace(app.Name),
 			AppID:                 strings.TrimSpace(app.AppID),
 			AppSecret:             strings.TrimSpace(app.AppSecret),
+			BotOpenID:             strings.TrimSpace(app.BotOpenID),
 			Enabled:               enabled,
 			UseSystemProxy:        services.FeishuUseSystemProxy,
 			ImageTempDir:          filepath.Join(paths.StateDir, "image-staging", sanitizeGatewayPath(gatewayID)),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
@@ -31,6 +32,7 @@ func (g *LiveGateway) routingEnv() gatewaypkg.RoutingEnv {
 func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 	return gatewaypkg.InboundEnv{
 		GatewayID:                     g.config.GatewayID,
+		BotOpenID:                     g.botOpenID(),
 		LookupSurfaceMessage:          g.lookupSurfaceMessage,
 		ParseTextActionWithoutCatalog: control.ParseFeishuTextActionWithoutCatalog,
 		QuotedInputs:                  g.quotedInputs,
@@ -47,6 +49,36 @@ func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 		DownloadFile:               g.downloadFileFn,
 		DeliverAsyncInboundFailure: g.deliverAsyncInboundFailure,
 	}
+}
+
+func (g *LiveGateway) botOpenID() string {
+	if g == nil {
+		return ""
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return strings.TrimSpace(g.config.BotOpenID)
+}
+
+func (g *LiveGateway) ensureBotIdentity(ctx context.Context) {
+	if g == nil || strings.TrimSpace(g.botOpenID()) != "" {
+		return
+	}
+	identityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	identity, err := FetchBotIdentity(identityCtx, g.config)
+	if err != nil {
+		log.Printf("feishu bot identity lookup failed: gateway=%s err=%v", strings.TrimSpace(g.config.GatewayID), err)
+		return
+	}
+	if strings.TrimSpace(identity.OpenID) == "" {
+		log.Printf("feishu bot identity lookup returned empty open_id: gateway=%s app_name=%s", strings.TrimSpace(g.config.GatewayID), strings.TrimSpace(identity.AppName))
+		return
+	}
+	g.mu.Lock()
+	g.config.BotOpenID = strings.TrimSpace(identity.OpenID)
+	g.mu.Unlock()
+	log.Printf("feishu bot identity loaded: gateway=%s app_name=%s", strings.TrimSpace(g.config.GatewayID), strings.TrimSpace(identity.AppName))
 }
 
 func (g *LiveGateway) lookupSurfaceMessage(messageID string) string {

@@ -33,6 +33,7 @@ type GatewayAppConfig struct {
 	Name                  string
 	AppID                 string
 	AppSecret             string
+	BotOpenID             string
 	Domain                string
 	Enabled               bool
 	UseSystemProxy        bool
@@ -92,6 +93,7 @@ func NewMultiGatewayController() *MultiGatewayController {
 			GatewayID:      cfg.GatewayID,
 			AppID:          cfg.AppID,
 			AppSecret:      cfg.AppSecret,
+			BotOpenID:      cfg.BotOpenID,
 			Domain:         cfg.Domain,
 			TempDir:        cfg.ImageTempDir,
 			UseSystemProxy: cfg.UseSystemProxy,

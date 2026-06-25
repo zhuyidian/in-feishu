@@ -132,6 +132,95 @@ func normalizeFeishuTextMentions(rawText string, mentions []*larkim.MentionEvent
 	return strings.NewReplacer(pairs...).Replace(rawText)
 }
 
+func shouldHandleInboundGroupMessage(chatType, messageType, rawContent string, mentions []*larkim.MentionEvent, botOpenID string) bool {
+	if strings.ToLower(strings.TrimSpace(chatType)) != "group" {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(messageType)) {
+	case "text":
+		rawText, err := ParseTextContent(rawContent)
+		if err != nil {
+			return false
+		}
+		mentionedBot := leadingFeishuMentionMatchesBot(rawText, mentions, botOpenID)
+		if strings.TrimSpace(botOpenID) != "" {
+			return mentionedBot
+		}
+		commandText, ok := stripLeadingFeishuMentionKeys(strings.TrimSpace(rawText), feishuMentionKeys(mentions))
+		return ok && strings.HasPrefix(strings.TrimSpace(commandText), "/")
+	default:
+		if strings.TrimSpace(botOpenID) == "" {
+			return len(feishuMentionKeys(mentions)) != 0
+		}
+		return feishuMentionMatchesBot(mentions, botOpenID)
+	}
+}
+
+func leadingFeishuMentionMatchesBot(rawText string, mentions []*larkim.MentionEvent, botOpenID string) bool {
+	botOpenID = strings.TrimSpace(botOpenID)
+	if botOpenID == "" {
+		return false
+	}
+	for _, mention := range leadingFeishuMentions(rawText, mentions) {
+		if feishuMentionMatchesBot([]*larkim.MentionEvent{mention}, botOpenID) {
+			return true
+		}
+	}
+	return false
+}
+
+func feishuMentionMatchesBot(mentions []*larkim.MentionEvent, botOpenID string) bool {
+	botOpenID = strings.TrimSpace(botOpenID)
+	if botOpenID == "" {
+		return false
+	}
+	for _, mention := range mentions {
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		if preferredFeishuUserID(stringPtr(mention.Id.OpenId), stringPtr(mention.Id.UserId), stringPtr(mention.Id.UnionId)) == botOpenID {
+			return true
+		}
+	}
+	return false
+}
+
+func leadingFeishuMentions(rawText string, mentions []*larkim.MentionEvent) []*larkim.MentionEvent {
+	byKey := map[string]*larkim.MentionEvent{}
+	for _, mention := range mentions {
+		if mention == nil {
+			continue
+		}
+		key := strings.TrimSpace(stringPtr(mention.Key))
+		if key != "" {
+			byKey[key] = mention
+		}
+	}
+	if len(byKey) == 0 {
+		return nil
+	}
+	rest := strings.TrimSpace(rawText)
+	var values []*larkim.MentionEvent
+	for {
+		var matchedKey string
+		var matchedMention *larkim.MentionEvent
+		for key, mention := range byKey {
+			if strings.HasPrefix(rest, key) && len(key) > len(matchedKey) {
+				matchedKey = key
+				matchedMention = mention
+			}
+		}
+		if matchedKey == "" || matchedMention == nil {
+			return values
+		}
+		values = append(values, matchedMention)
+		rest = strings.TrimLeft(rest[len(matchedKey):], " \t\r\n")
+		if rest == "" {
+			return values
+		}
+	}
+}
+
 func normalizeFeishuCommandCandidate(rawText string, mentions []*larkim.MentionEvent) string {
 	trimmed := strings.TrimSpace(rawText)
 	if trimmed == "" {

@@ -1,5 +1,10 @@
 # Codex Remote Feishu
 
+## 版本迭代说明
+
+- `v1.7.1`：群聊现在支持 `@当前机器人` 后直接发送自然语言，同时继续忽略普通群消息和 `@其他人`，避免机器人误介入。
+- 本次还补充了机器人身份加载与缓存逻辑，确保群聊 mention 匹配的是当前机器人本身。
+
 `codex-remote-feishu` 把一台机器上的 Codex 工作现场带到飞书，让你可以在飞书里接管工作区、切换 thread、继续对话、发图和停止当前 turn。
 
 使用说明 https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc

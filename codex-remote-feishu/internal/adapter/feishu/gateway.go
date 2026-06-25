@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -31,6 +32,7 @@ type LiveGatewayConfig struct {
 	GatewayID      string
 	AppID          string
 	AppSecret      string
+	BotOpenID      string
 	Domain         string
 	TempDir        string
 	UseSystemProxy bool
@@ -99,6 +101,7 @@ type feishuPostNode struct {
 
 func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	config.GatewayID = normalizeGatewayID(config.GatewayID)
+	config.BotOpenID = strings.TrimSpace(config.BotOpenID)
 	client := NewLarkClient(config.AppID, config.AppSecret)
 	gateway := &LiveGateway{
 		config:    config,

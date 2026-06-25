@@ -471,6 +471,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
 			return PlannedInboundMessage{}, false, err
 		}
+		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
+			return PlannedInboundMessage{}, false, nil
+		}
 		commandAction, handled := env.ParseTextActionWithoutCatalog(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID
@@ -499,6 +503,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "post":
+		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
+			return PlannedInboundMessage{}, false, nil
+		}
 		var contentPreview feishuPostContent
 		if err := json.Unmarshal([]byte(content), &contentPreview); err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_post_content", err)
@@ -520,6 +528,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "image":
+		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
+			return PlannedInboundMessage{}, false, nil
+		}
 		imageKey, err := ParseImageKey(content)
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_image_content", err)
@@ -542,6 +554,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "file":
+		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
+			return PlannedInboundMessage{}, false, nil
+		}
 		fileKey, fileName, err := ParseFileContent(content)
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_file_content", err)
@@ -565,6 +581,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "merge_forward":
+		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
+			return PlannedInboundMessage{}, false, nil
+		}
 		env.RecordSurfaceMessage(messageID, surfaceSessionID)
 		return PlannedInboundMessage{
 			Queue: &QueuedMessageWork{

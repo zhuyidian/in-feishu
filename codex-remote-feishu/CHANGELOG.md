@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.1
+
+### Feishu group mention routing
+
+- Group chats now handle natural-language messages only when the message explicitly mentions the current bot.
+- Plain group messages and messages mentioning other users or bots are ignored, preventing unintended bot intervention.
+- Added startup bot identity loading so mention checks can match the current Feishu bot by open_id.
+
 ## v1.7.0
 
 ### Group summary sync

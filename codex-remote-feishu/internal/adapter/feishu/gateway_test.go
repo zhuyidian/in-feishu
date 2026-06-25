@@ -469,7 +469,7 @@ func TestParseMessageEventRemovedLegacyHeadlessCompatBecomesPlainTextMessage(t *
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-msg-compat"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				MessageType: stringRef("text"),
 				Content:     stringRef(`{"text":" /newinstance "}`),
 			},
@@ -500,7 +500,11 @@ func TestParseMessageEventCommandPreservesGatewayID(t *testing.T) {
 				ChatId:      stringRef("oc_chat"),
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("text"),
-				Content:     stringRef(`{"text":" /list "}`),
+				Content:     stringRef(`{"text":" @_user_1 /list "}`),
+				Mentions: []*larkim.MentionEvent{{
+					Key:  stringRef("@_user_1"),
+					Name: stringRef("Codex Remote"),
+				}},
 			},
 		},
 	}
@@ -526,10 +530,37 @@ func TestParseMessageEventCommandPreservesGatewayID(t *testing.T) {
 	}
 }
 
+func TestParseMessageEventIgnoresUnmentionedGroupText(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	event := testTextMessageEvent("evt-group-text-1", "om-group-text-1", "送啥页面")
+	event.Event.Message.ChatType = stringRef("group")
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if ok || action.Kind != "" {
+		t.Fatalf("expected unmentioned group text to be ignored, got %#v", action)
+	}
+}
+
+func TestParseMessageEventIgnoresUnmentionedGroupCommand(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	event := testTextMessageEvent("evt-group-command-1", "om-group-command-1", "/list")
+	event.Event.Message.ChatType = stringRef("group")
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if ok || action.Kind != "" {
+		t.Fatalf("expected unmentioned group command to be ignored, got %#v", action)
+	}
+}
+
 func TestParseMessageEventNormalizesMentionPlaceholdersInText(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	event := testTextMessageEvent("evt-mention-text-1", "om-msg-mention-1", "@_user_1 帮我看一下")
-	event.Event.Message.ChatType = stringRef("group")
 	event.Event.Message.Mentions = []*larkim.MentionEvent{{
 		Key:  stringRef("@_user_1"),
 		Name: stringRef("Codex Remote"),
@@ -550,12 +581,57 @@ func TestParseMessageEventNormalizesMentionPlaceholdersInText(t *testing.T) {
 	}
 }
 
+func TestParseMessageEventHandlesMentionedBotGroupTextWithoutSlashCommand(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
+	event := testTextMessageEvent("evt-mention-text-group-1", "om-msg-mention-group-1", "@_user_1 please check")
+	event.Event.Message.ChatType = stringRef("group")
+	event.Event.Message.Mentions = []*larkim.MentionEvent{{
+		Key:  stringRef("@_user_1"),
+		Id:   &larkim.UserId{OpenId: stringRef("ou_bot")},
+		Name: stringRef("Codex Remote"),
+	}}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected mentioned bot group text to be handled")
+	}
+	if action.Kind != control.ActionTextMessage {
+		t.Fatalf("unexpected action kind: %#v", action)
+	}
+	if action.Text != "@Codex Remote please check" {
+		t.Fatalf("text = %q, want normalized bot mention text", action.Text)
+	}
+}
+
+func TestParseMessageEventIgnoresOtherMentionedGroupText(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
+	event := testTextMessageEvent("evt-other-mention-text-group-1", "om-msg-other-mention-group-1", "@_user_1 please check")
+	event.Event.Message.ChatType = stringRef("group")
+	event.Event.Message.Mentions = []*larkim.MentionEvent{{
+		Key:  stringRef("@_user_1"),
+		Id:   &larkim.UserId{OpenId: stringRef("ou_other")},
+		Name: stringRef("Someone Else"),
+	}}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if ok || action.Kind != "" {
+		t.Fatalf("expected other mentioned group text to be ignored, got %#v", action)
+	}
+}
+
 func TestPlanInboundMessageEventTreatsMentionedSlashCommandAsCommand(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	event := testTextMessageEvent("evt-mention-cmd-1", "om-msg-mention-cmd-1", "@_user_1 /list")
 	event.Event.Message.ChatType = stringRef("group")
 	event.Event.Message.Mentions = []*larkim.MentionEvent{{
 		Key:  stringRef("@_user_1"),
+		Id:   &larkim.UserId{OpenId: stringRef("ou_bot")},
 		Name: stringRef("Codex Remote"),
 	}}
 
@@ -574,6 +650,24 @@ func TestPlanInboundMessageEventTreatsMentionedSlashCommandAsCommand(t *testing.
 	}
 	if plan.action.Text != "/list" {
 		t.Fatalf("action text = %q, want /list", plan.action.Text)
+	}
+}
+
+func TestPlanInboundMessageEventIgnoresUnmentionedGroupMessages(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	tests := []*larkim.P2MessageReceiveV1{
+		testTextMessageEvent("evt-group-text-plan-1", "om-group-text-plan-1", "这是群里的普通讨论"),
+		testImageMessageEvent("evt-group-image-plan-1", "om-group-image-plan-1", "img-key-1"),
+	}
+	for _, event := range tests {
+		event.Event.Message.ChatType = stringRef("group")
+		plan, ok, err := gateway.planInboundMessageEvent(event)
+		if err != nil {
+			t.Fatalf("planInboundMessageEvent returned error: %v", err)
+		}
+		if ok || plan.action != nil || plan.queue != nil {
+			t.Fatalf("expected unmentioned group message to be ignored, got %#v", plan)
+		}
 	}
 }
 

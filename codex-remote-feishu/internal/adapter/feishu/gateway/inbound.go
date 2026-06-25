@@ -44,6 +44,10 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
 			return control.Action{}, false, err
 		}
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
+			return control.Action{}, false, nil
+		}
 		commandAction, handled := env.ParseTextActionWithoutCatalog(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID
@@ -63,6 +67,10 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "post":
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
+			return control.Action{}, false, nil
+		}
 		inputs, text, err := env.ParsePostInputs(ctx, action.MessageID, stringPtr(message.Content))
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_post_content", err)
@@ -79,6 +87,10 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "image":
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
+			return control.Action{}, false, nil
+		}
 		imageKey, err := ParseImageKey(stringPtr(message.Content))
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_image_content", err)
@@ -96,6 +108,10 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "file":
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
+			return control.Action{}, false, nil
+		}
 		fileKey, fileName, err := ParseFileContent(stringPtr(message.Content))
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_file_content", err)
@@ -112,6 +128,10 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "merge_forward":
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
+			return control.Action{}, false, nil
+		}
 		summary, inputs, err := env.BuildMergeForwardStructuredInput(ctx, message)
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_merge_forward_content", err)

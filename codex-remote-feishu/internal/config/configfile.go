@@ -116,6 +116,7 @@ type FeishuAppConfig struct {
 	Name       string     `json:"name,omitempty"`
 	AppID      string     `json:"appId,omitempty"`
 	AppSecret  string     `json:"appSecret,omitempty"`
+	BotOpenID  string     `json:"botOpenId,omitempty"`
 	Enabled    *bool      `json:"enabled,omitempty"`
 	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
 }

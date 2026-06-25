@@ -71,6 +71,7 @@ type adminFeishuAppSummary struct {
 	ID              string                       `json:"id"`
 	Name            string                       `json:"name,omitempty"`
 	AppID           string                       `json:"appId,omitempty"`
+	BotOpenID       string                       `json:"botOpenId,omitempty"`
 	ConsoleLinks    feishuAppConsoleLinks        `json:"consoleLinks,omitempty"`
 	HasSecret       bool                         `json:"hasSecret"`
 	Enabled         bool                         `json:"enabled"`
