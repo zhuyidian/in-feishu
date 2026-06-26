@@ -49,6 +49,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 		return a.handleThreadHistoryDaemonCommandLocked(command)
 	case control.DaemonCommandSendIMFile:
 		return a.handleSendIMFileCommandLocked(command)
+	case control.DaemonCommandSkillRun:
+		return a.handleSkillRunCommandLocked(command)
 	case control.DaemonCommandGitWorkspaceImport:
 		return a.handleGitWorkspaceImportCommandLocked(command)
 	case control.DaemonCommandGitWorkspaceImportCancel:

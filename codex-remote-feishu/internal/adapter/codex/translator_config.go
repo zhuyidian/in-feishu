@@ -60,6 +60,9 @@ func chooseObservedAccessMode(values ...string) string {
 }
 
 func applyPromptOverridesToThreadStart(params map[string]any, overrides agentproto.PromptOverrides) {
+	if strings.TrimSpace(overrides.DeveloperInstructions) != "" {
+		params["developerInstructions"] = mergeDeveloperInstructions(params["developerInstructions"], overrides.DeveloperInstructions)
+	}
 	if overrides.Model != "" {
 		params["model"] = overrides.Model
 	}
@@ -73,6 +76,21 @@ func applyPromptOverridesToThreadStart(params map[string]any, overrides agentpro
 		params["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
 		params["sandbox"] = agentproto.ThreadSandboxForAccessMode(overrides.AccessMode)
 	}
+}
+
+func mergeDeveloperInstructions(base any, extra string) string {
+	extra = strings.TrimSpace(extra)
+	if extra == "" {
+		return lookupStringFromAny(base)
+	}
+	current := strings.TrimSpace(lookupStringFromAny(base))
+	if current == "" {
+		return extra
+	}
+	if strings.Contains(current, extra) {
+		return current
+	}
+	return current + "\n\n" + extra
 }
 
 func applyPromptOverridesToTurnStart(template map[string]any, overrides agentproto.PromptOverrides) {

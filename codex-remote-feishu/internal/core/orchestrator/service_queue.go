@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/workspaceskills"
 )
 
 func defaultPromptExecutionModeForThread(threadID string) agentproto.PromptExecutionMode {
@@ -327,13 +328,14 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 				(item.FrozenExecutionMode == "" && item.FrozenThreadID == ""),
 		},
 		Prompt: agentproto.Prompt{
-			Inputs: item.Inputs,
+			Inputs: workspaceskills.InjectHints(item.Inputs, item.FrozenCWD),
 		},
 		Overrides: agentproto.PromptOverrides{
-			Model:           item.FrozenOverride.Model,
-			ReasoningEffort: item.FrozenOverride.ReasoningEffort,
-			AccessMode:      item.FrozenOverride.AccessMode,
-			PlanMode:        frozenPlanModeOverrideValue(item.FrozenPlanMode),
+			Model:                 item.FrozenOverride.Model,
+			ReasoningEffort:       item.FrozenOverride.ReasoningEffort,
+			AccessMode:            item.FrozenOverride.AccessMode,
+			PlanMode:              frozenPlanModeOverrideValue(item.FrozenPlanMode),
+			DeveloperInstructions: workspaceskills.Hint(item.FrozenCWD),
 		},
 	}
 }

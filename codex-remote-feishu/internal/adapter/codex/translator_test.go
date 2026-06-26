@@ -153,6 +153,38 @@ func TestTranslatePromptSendToNewThreadAndFollowupTurnStart(t *testing.T) {
 	}
 }
 
+func TestTranslatePromptSendInjectsDeveloperInstructionsIntoThreadStart(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind: agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			CWD: "/tmp/project",
+		},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "build apk"}},
+		},
+		Overrides: agentproto.PromptOverrides{
+			DeveloperInstructions: "[codex-remote workspace skills]\n- gkprep-build-apk\n[/codex-remote workspace skills]",
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one native command, got %d", len(commands))
+	}
+	var start map[string]any
+	if err := json.Unmarshal(commands[0], &start); err != nil {
+		t.Fatalf("unmarshal thread/start: %v", err)
+	}
+	params, _ := start["params"].(map[string]any)
+	instructions := lookupStringFromAny(params["developerInstructions"])
+	if !strings.Contains(instructions, "gkprep-build-apk") ||
+		!strings.Contains(instructions, "[codex-remote workspace skills]") {
+		t.Fatalf("expected workspace skill developer instructions, got %q", instructions)
+	}
+}
+
 func TestObserveTurnStartedMarksRemoteInitiator(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {

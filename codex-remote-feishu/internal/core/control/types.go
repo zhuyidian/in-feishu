@@ -595,6 +595,7 @@ const (
 	DaemonCommandVSCodeMigrate              DaemonCommandKind = "vscode.migrate"
 	DaemonCommandThreadHistoryRead          DaemonCommandKind = "thread.history.read"
 	DaemonCommandSendIMFile                 DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandSkillRun                   DaemonCommandKind = "skill.run"
 	DaemonCommandGitWorkspaceImport         DaemonCommandKind = "workspace.git_import"
 	DaemonCommandGitWorkspaceImportCancel   DaemonCommandKind = "workspace.git_import.cancel"
 	DaemonCommandGitWorkspaceWorktreeCreate DaemonCommandKind = "workspace.git_worktree.create"
@@ -625,4 +626,11 @@ type DaemonCommand struct {
 	RefName               string
 	BranchName            string
 	DirectoryName         string
+	SkillName             string
+	SkillPath             string
+	SkillPlatform         string
+	SkillBuildType        string
+	SkillSendToFeishu     bool
+	SkillChatID           string
+	SkillFolderToken      string
 }

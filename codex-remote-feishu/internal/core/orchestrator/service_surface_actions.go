@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/workspaceskills"
 )
 
 func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
@@ -209,6 +210,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
+	if commandEvents := s.matchWorkspaceSkillCommand(surface, inst, action, text); len(commandEvents) != 0 {
+		return commandEvents
+	}
 	reviewSession := s.activeReviewSession(surface)
 	if reviewSession != nil {
 		s.ensureReviewSessionParentSelection(surface, reviewSession)
@@ -319,6 +323,52 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		)...)
 	}
 	return append(events, s.enqueueQueueItem(surface, action.MessageID, action.Text, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)...)
+}
+
+func (s *Service) matchWorkspaceSkillCommand(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, action control.Action, text string) []eventcontract.Event {
+	if surface == nil || inst == nil {
+		return nil
+	}
+	workspace := firstNonEmpty(strings.TrimSpace(inst.WorkspaceRoot), strings.TrimSpace(inst.WorkspaceKey))
+	skill, ok := workspaceskills.MatchRequestedSkill(text, workspaceskills.Read(workspace))
+	if !ok || skill == nil {
+		return nil
+	}
+	if strings.TrimSpace(skill.Name) != "gkprep-build-apk" {
+		return notice(surface, "skill_direct_run_unsupported", fmt.Sprintf("已匹配到本地 skill `%s`，但当前只接入了 `gkprep-build-apk` 的直接执行通道。", skill.Name))
+	}
+	platform := "y41air"
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "y41") && !strings.Contains(lower, "y41air") {
+		platform = "y41"
+	}
+	buildType := "release"
+	if strings.Contains(lower, "debug") {
+		buildType = "debug"
+	}
+	return []eventcontract.Event{{
+		Kind:             eventcontract.KindDaemonCommand,
+		GatewayID:        surface.GatewayID,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		SourceMessageID:  action.MessageID,
+		DaemonCommand: &control.DaemonCommand{
+			Kind:             control.DaemonCommandSkillRun,
+			GatewayID:        surface.GatewayID,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			SourceMessageID:  action.MessageID,
+			FromCardAction:   action.IsCardAction(),
+			InstanceID:       surface.AttachedInstanceID,
+			WorkspaceKey:     workspace,
+			SkillName:        skill.Name,
+			SkillPath:        skill.Path,
+			SkillPlatform:    platform,
+			SkillBuildType:   buildType,
+			SkillSendToFeishu: strings.Contains(text, "飞书") ||
+				strings.Contains(strings.ToLower(text), "feishu") ||
+				strings.Contains(strings.ToLower(text), "lark"),
+			SkillChatID: surface.ChatID,
+		},
+	}}
 }
 
 func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
