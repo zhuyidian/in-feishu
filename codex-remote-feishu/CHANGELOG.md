@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.7.3
+
+### Quoted file handoff
+
+- Added support for text/post messages that reference a Feishu file message: the gateway now downloads the referenced file and passes a structured local file path context to Codex.
+- Added a safety instruction for replacement workflows so Codex must list same-name target candidates in the selected workspace and ask for confirmation before overwriting.
+
+### APK skill direct-run reliability
+
+- Fixed the `gkprep-build-apk` direct-run path on Windows by normalizing extended `//?/` workspace paths before invoking PowerShell skill scripts.
+- Switched the direct-run PowerShell launcher to encoded commands with explicit UTF-8 console output, preventing garbled Feishu error cards and `$root`/`$PSScriptRoot` resolution failures.
+- Added focused tests for path normalization, PowerShell command encoding, and workspace skill dispatch.
+
+## v1.7.2
+
+### Workspace skill direct execution
+
+- Selected workspaces now expose local `.agents/skills` to Codex so project-specific skills can be matched from Feishu requests.
+- `gkprep-build-apk` requests now use a direct project skill execution path instead of falling back to a normal Codex conversation first.
+- APK build result reporting is kept concise in codex-remote while the project skill remains responsible for sending the generated APK to Feishu.
+
 ## v1.7.1
 
 ### Feishu group mention routing

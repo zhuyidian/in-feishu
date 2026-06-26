@@ -79,6 +79,21 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 			return nil
 		}
 		return []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
+	case "file":
+		fileKey, fileName, err := gatewaypkg.ParseFileContent(referenced.Content)
+		if err != nil {
+			log.Printf("feishu quote file parse ignored: message=%s err=%v", referenced.MessageID, err)
+			return nil
+		}
+		path, err := g.downloadFileFn(ctx, referenced.MessageID, fileKey, fileName)
+		if err != nil {
+			log.Printf("feishu quote file download ignored: message=%s err=%v", referenced.MessageID, err)
+			return nil
+		}
+		if wrapped := quotedFileInput(fileName, path); wrapped.Text != "" {
+			return []agentproto.Input{wrapped}
+		}
+		return nil
 	case "merge_forward":
 		payload, err := g.buildMergeForwardStructuredPayloadFromGatewayMessage(ctx, referenced, true)
 		if err != nil {
@@ -101,6 +116,27 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 		return nil
 	default:
 		return nil
+	}
+}
+
+func quotedFileInput(fileName, path string) agentproto.Input {
+	fileName = strings.TrimSpace(fileName)
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return agentproto.Input{}
+	}
+	if fileName == "" {
+		fileName = "unnamed file"
+	}
+	return agentproto.Input{
+		Type: agentproto.InputText,
+		Text: strings.Join([]string{
+			"<referenced_file>",
+			"name: " + fileName,
+			"local_path: " + path,
+			"safety: If the user asks to replace a project file with this file, first find same-name candidates inside the selected workspace, list the target path(s), and ask for confirmation before overwriting.",
+			"</referenced_file>",
+		}, "\n"),
 	}
 }
 

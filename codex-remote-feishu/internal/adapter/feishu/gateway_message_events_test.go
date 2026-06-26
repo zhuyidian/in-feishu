@@ -322,7 +322,7 @@ func TestParseMessageEventEnrichesReplyWithQuotedText(t *testing.T) {
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-reply-1"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				MessageType: stringRef("text"),
 				ParentId:    stringRef("om-parent-1"),
 				Content:     stringRef(`{"text":"这是回复内容"}`),
@@ -344,6 +344,61 @@ func TestParseMessageEventEnrichesReplyWithQuotedText(t *testing.T) {
 		t.Fatalf("unexpected quoted input: %#v", action.Inputs[0])
 	}
 	if action.Inputs[1].Type != agentproto.InputText || action.Inputs[1].Text != "这是回复内容" {
+		t.Fatalf("unexpected current text input: %#v", action.Inputs[1])
+	}
+}
+
+func TestParseMessageEventEnrichesReplyWithQuotedFile(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
+		if messageID != "om-file-parent-1" {
+			t.Fatalf("unexpected parent message lookup: %s", messageID)
+		}
+		return &gatewayMessage{
+			MessageID:   messageID,
+			MessageType: "file",
+			Content:     `{"file_key":"file-key-quoted-1","file_name":"learning-flutter.zip"}`,
+		}, nil
+	}
+	gateway.downloadFileFn = func(_ context.Context, messageID, fileKey, fileName string) (string, error) {
+		if messageID != "om-file-parent-1" || fileKey != "file-key-quoted-1" || fileName != "learning-flutter.zip" {
+			t.Fatalf("unexpected quoted file download request: message=%s key=%s name=%s", messageID, fileKey, fileName)
+		}
+		return "D:\\Temp\\learning-flutter.zip", nil
+	}
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Sender: &larkim.EventSender{
+				SenderId: &larkim.UserId{OpenId: stringRef("ou_user")},
+			},
+			Message: &larkim.EventMessage{
+				MessageId:   stringRef("om-reply-file-1"),
+				ChatId:      stringRef("oc_chat"),
+				ChatType:    stringRef("p2p"),
+				MessageType: stringRef("text"),
+				ParentId:    stringRef("om-file-parent-1"),
+				Content:     stringRef(`{"text":"replace the same-name project file after confirmation"}`),
+			},
+		},
+	}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if !ok || action.Kind != control.ActionTextMessage {
+		t.Fatalf("expected reply text to be handled, got ok=%v action=%#v", ok, action)
+	}
+	if len(action.Inputs) != 2 {
+		t.Fatalf("expected quoted file + current text inputs, got %#v", action.Inputs)
+	}
+	if action.Inputs[0].Type != agentproto.InputText ||
+		!strings.Contains(action.Inputs[0].Text, "learning-flutter.zip") ||
+		!strings.Contains(action.Inputs[0].Text, "D:\\Temp\\learning-flutter.zip") ||
+		!strings.Contains(action.Inputs[0].Text, "ask for confirmation before overwriting") {
+		t.Fatalf("unexpected quoted file input: %#v", action.Inputs[0])
+	}
+	if action.Inputs[1].Type != agentproto.InputText || action.Inputs[1].Text != "replace the same-name project file after confirmation" {
 		t.Fatalf("unexpected current text input: %#v", action.Inputs[1])
 	}
 }
@@ -374,7 +429,7 @@ func TestParseMessageEventEnrichesReplyWithQuotedPost(t *testing.T) {
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-reply-2"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				MessageType: stringRef("text"),
 				ParentId:    stringRef("om-parent-post-1"),
 				Content:     stringRef(`{"text":"请继续处理"}`),
