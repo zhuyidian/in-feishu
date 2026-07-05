@@ -69,6 +69,32 @@ curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-re
 - `/cron` 定时任务：可为当前 daemon 实例配置定时任务，需要在 WebSetup 中开启相关权限。
 - VS Code 跟随：默认不需要接入 VS Code；只有需要跟随编辑器当前焦点时，再在 WebSetup / Admin UI 中按需开启。
 
+## Skill 接入
+
+in-feishu 会在当前被接管的工作区里读取项目级 skill：
+
+```text
+<workspace>/.agents/skills/<skill-name>/SKILL.md
+```
+
+也就是说，skill 应该放在你通过 `/list` 选择的目标项目里，而不是放在本仓库根目录。
+
+当前已接入直连执行通道的 skill 是 `gkprep-build-apk`。如果某个项目需要从飞书里直接触发 APK 构建，请在该项目根目录放置：
+
+```text
+<workspace>/.agents/skills/gkprep-build-apk/SKILL.md
+<workspace>/.agents/skills/gkprep-build-apk/scripts/package_apk.ps1
+```
+
+例如：
+
+```text
+E:\project\study\V5.0-Study-GKPrep-Plus\.agents\skills\gkprep-build-apk\SKILL.md
+E:\project\study\V5.0-Study-GKPrep-Plus\.agents\skills\gkprep-build-apk\scripts\package_apk.ps1
+```
+
+本仓库里的 `codex-remote-feishu/.codex/skills/` 是维护 in-feishu 源码时给 Codex 使用的 repo skill，不会作为飞书运行时的用户项目 skill 自动接管。
+
 ## 版本说明
 
 每个正式版本都会通过 GitHub tag / Release 记录对应修改。下面是当前主要版本的功能变化摘要：
