@@ -80,6 +80,7 @@ jobs:
     steps:
       - name: Resolve source ref
         id: source_ref
+        working-directory: .
         run: |
           if [[ '${{ github.event_name }}' == 'release' ]]; then
             ref='${{ github.event.release.tag_name }}'

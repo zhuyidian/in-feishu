@@ -42,6 +42,7 @@ jobs:
     steps:
       - name: Resolve source ref
         id: source
+        working-directory: .
         run: |
           ref='${{ inputs.ref }}'
           if [[ -z "${ref}" ]]; then
