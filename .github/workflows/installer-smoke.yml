@@ -65,6 +65,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: codex-remote-feishu/go.mod
+          cache-dependency-path: codex-remote-feishu/go.sum
 
       - name: Install web dependencies
         working-directory: codex-remote-feishu/web

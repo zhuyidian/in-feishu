@@ -10,6 +10,7 @@ import (
 func TestPlanInboundMessageEventRemovedLegacyCompatQueuesPlainTextMessage(t *testing.T) {
 	env := InboundEnv{
 		GatewayID:                     "app-2",
+		BotOpenID:                     "ou_bot",
 		ParseTextActionWithoutCatalog: parseTextAction,
 		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
 			t.Helper()
@@ -31,7 +32,12 @@ func TestPlanInboundMessageEventRemovedLegacyCompatQueuesPlainTextMessage(t *tes
 				ChatId:      stringRef("oc_chat"),
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("text"),
-				Content:     stringRef(`{"text":" /newinstance "}`),
+				Content:     stringRef(`{"text":"@_user_1 /newinstance"}`),
+				Mentions: []*larkim.MentionEvent{{
+					Key:  stringRef("@_user_1"),
+					Id:   &larkim.UserId{OpenId: stringRef("ou_bot")},
+					Name: stringRef("Codex Remote"),
+				}},
 			},
 		},
 	}
@@ -49,7 +55,7 @@ func TestPlanInboundMessageEventRemovedLegacyCompatQueuesPlainTextMessage(t *tes
 	if planned.Queue == nil {
 		t.Fatal("expected removed compat command to queue as plain text work")
 	}
-	if planned.Queue.messageType != "text" || strings.TrimSpace(planned.Queue.text) != "/newinstance" {
+	if planned.Queue.messageType != "text" || strings.TrimSpace(planned.Queue.text) != "@Codex Remote /newinstance" {
 		t.Fatalf("unexpected queued plain text work: %#v", planned.Queue)
 	}
 }

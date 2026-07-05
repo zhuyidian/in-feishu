@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 const skillRunTimeout = 90 * time.Minute
@@ -45,7 +45,7 @@ func (a *App) runGKPrepBuildAPKSkill(command control.DaemonCommand, workspace, s
 	ctx, cancel := context.WithTimeout(context.Background(), skillRunTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "powershell.exe",
+	cmd := execlaunch.CommandContext(ctx, "powershell.exe",
 		"-NoProfile",
 		"-NonInteractive",
 		"-ExecutionPolicy", "Bypass",

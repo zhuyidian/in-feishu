@@ -102,6 +102,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: codex-remote-feishu/go.mod
+          cache-dependency-path: codex-remote-feishu/go.sum
 
       - name: Fetch tags
         run: git fetch --force --tags origin

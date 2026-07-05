@@ -12,7 +12,7 @@ import (
 )
 
 func TestHandleInboundMessageEventDeliversFileAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.downloadFileFn = func(_ context.Context, messageID, fileKey, fileName string) (string, error) {
 		if messageID != "om-file-2" || fileKey != "file-key-2" || fileName != "design.pdf" {
 			t.Fatalf("unexpected download args: message=%q key=%q name=%q", messageID, fileKey, fileName)
@@ -48,6 +48,11 @@ func TestHandleInboundMessageEventDeliversFileAction(t *testing.T) {
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("file"),
 				Content:     stringRef(`{"file_key":"file-key-2","file_name":"design.pdf"}`),
+				Mentions: []*larkim.MentionEvent{{
+					Key:  stringRef("@_user_1"),
+					Id:   &larkim.UserId{OpenId: stringRef("ou_bot")},
+					Name: stringRef("Codex Remote"),
+				}},
 			},
 		},
 	}
