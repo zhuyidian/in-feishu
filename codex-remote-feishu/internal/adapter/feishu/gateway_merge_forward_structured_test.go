@@ -29,7 +29,7 @@ func mustDecodeForwardedChatEnvelopeInput(t *testing.T, input agentproto.Input, 
 }
 
 func TestParseMessageEventHandlesMergeForwardWithNestedImages(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
 		if messageID != "om-forward-image-1" {
 			t.Fatalf("unexpected merge forward lookup: %s", messageID)
@@ -90,6 +90,7 @@ func TestParseMessageEventHandlesMergeForwardWithNestedImages(t *testing.T) {
 				ChatId:      stringRef("oc_chat"),
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("merge_forward"),
+				Mentions:    botMention(),
 				Content:     stringRef("Merged and Forwarded Message"),
 			},
 		},

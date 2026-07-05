@@ -44,7 +44,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
 			return control.Action{}, false, err
 		}
-		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID, referencedMessageID(message)) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
 			return control.Action{}, false, nil
 		}
@@ -67,7 +67,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "post":
-		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID, referencedMessageID(message)) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
 			return control.Action{}, false, nil
 		}
@@ -87,7 +87,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "image":
-		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID, referencedMessageID(message)) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
 			return control.Action{}, false, nil
 		}
@@ -108,7 +108,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "file":
-		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID, referencedMessageID(message)) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
 			return control.Action{}, false, nil
 		}
@@ -128,7 +128,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "merge_forward":
-		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID) {
+		if !shouldHandleInboundGroupMessage(chatType, stringPtr(message.MessageType), stringPtr(message.Content), message.Mentions, env.BotOpenID, referencedMessageID(message)) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "group_message_without_mention")
 			return control.Action{}, false, nil
 		}

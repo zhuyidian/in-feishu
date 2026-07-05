@@ -132,8 +132,11 @@ func normalizeFeishuTextMentions(rawText string, mentions []*larkim.MentionEvent
 	return strings.NewReplacer(pairs...).Replace(rawText)
 }
 
-func shouldHandleInboundGroupMessage(chatType, messageType, rawContent string, mentions []*larkim.MentionEvent, botOpenID string) bool {
+func shouldHandleInboundGroupMessage(chatType, messageType, rawContent string, mentions []*larkim.MentionEvent, botOpenID, replyTargetMessageID string) bool {
 	if strings.ToLower(strings.TrimSpace(chatType)) != "group" {
+		return true
+	}
+	if strings.TrimSpace(replyTargetMessageID) != "" {
 		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(messageType)) {

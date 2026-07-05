@@ -259,7 +259,7 @@ func TestParseMessageEventPrefersOpenIDOverUserIDForP2P(t *testing.T) {
 }
 
 func TestParseMessageEventBuildsMixedInputsForPost(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.downloadImageFn = func(_ context.Context, messageID, imageKey string) (string, string, error) {
 		if messageID != "om-post-1" || imageKey != "img-post-1" {
 			t.Fatalf("unexpected post image download request: message=%s image=%s", messageID, imageKey)
@@ -276,6 +276,7 @@ func TestParseMessageEventBuildsMixedInputsForPost(t *testing.T) {
 				ChatId:      stringRef("oc_chat"),
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("post"),
+				Mentions:    botMention(),
 				Content:     stringRef(`{"title":"","content":[[{"tag":"img","image_key":"img-post-1"}],[{"tag":"text","text":"这是图文混合消息"}]]}`),
 			},
 		},
@@ -808,7 +809,7 @@ func TestParseMessageEventQuotesInteractiveFinalMessage(t *testing.T) {
 }
 
 func TestParseMessageEventBuildsFileAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	var gotMessageID, gotFileKey, gotFileName string
 	gateway.downloadFileFn = func(_ context.Context, messageID, fileKey, fileName string) (string, error) {
 		gotMessageID = messageID
@@ -838,6 +839,7 @@ func TestParseMessageEventBuildsFileAction(t *testing.T) {
 				ChatType:    stringRef("group"),
 				ThreadId:    stringRef("omt-thread-1"),
 				MessageType: stringRef("file"),
+				Mentions:    botMention(),
 				Content:     stringRef(`{"file_key":"file-key-1","file_name":"notes.txt"}`),
 			},
 		},
