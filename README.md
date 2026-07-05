@@ -69,6 +69,23 @@ curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-re
 - `/cron` 定时任务：可为当前 daemon 实例配置定时任务，需要在 WebSetup 中开启相关权限。
 - VS Code 跟随：默认不需要接入 VS Code；只有需要跟随编辑器当前焦点时，再在 WebSetup / Admin UI 中按需开启。
 
+## 版本说明
+
+每个正式版本都会通过 GitHub tag / Release 记录对应修改。下面是当前主要版本的功能变化摘要：
+
+| 版本 | 主要变化 |
+| --- | --- |
+| [v1.7.4](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.4) | 本仓库开始提供可直接安装的 GitHub Release；修复根目录 release workflow、测试阻塞和群聊回复上下文处理。 |
+| [v1.7.3](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.3) | 支持引用飞书文件消息后交给 Codex 处理；增强 APK skill 在 Windows 下的直接执行稳定性。 |
+| [v1.7.2](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.2) | 工作区可暴露本地 `.agents/skills`，并支持项目内 APK 构建 skill 直接运行。 |
+| [v1.7.1](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.1) | 群聊消息改为仅在明确提及当前机器人时响应，减少误触发。 |
+| [v1.7.0](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.0) | 增加飞书群历史摘要同步，支持 `/summary sync today`、`24h`、`200` 等用法。 |
+| v1.6.0 | 优化飞书中继续当前执行、工作区选择、过程卡、定时任务、升级和多实例部署体验。 |
+| v1.5.0 | 明确默认使用路径，完善 WebSetup、会话恢复、多工作区切换和用户升级入口。 |
+| v1.4.0 | 补齐 release track、安装引导、飞书菜单、旧卡片失效提示、恢复和升级回滚基础。 |
+
+更完整的逐版本说明见 [CHANGELOG.md](./codex-remote-feishu/CHANGELOG.md)。
+
 ## 发布版本
 
 正式版本通过 GitHub Actions 的 `Release` workflow 构建并发布到本仓库 Releases：
