@@ -519,19 +519,19 @@ release / installer smoke test 必须覆盖真实产品路径：
 在线安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash
 ```
 
 安装最新 beta track：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --track beta
 ```
 
 固定版本在线安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --version v1.0.0
 ```
 
 手动解压后启动 WebSetup：

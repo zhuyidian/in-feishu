@@ -98,14 +98,14 @@ echo
 echo "Latest production install:"
 echo
 echo '```bash'
-echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash"
+echo "curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash"
 echo '```'
 echo
 if [[ "${track}" != "production" ]]; then
   echo "Latest ${track} install:"
   echo
   echo '```bash'
-  echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track ${track}"
+  echo "curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --track ${track}"
   echo '```'
   echo
 fi
@@ -114,7 +114,7 @@ echo
 echo "Pin this version:"
 echo
 echo '```bash'
-echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version ${version}"
+echo "curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --version ${version}"
 echo '```'
 echo
 echo "Manual archive install:"

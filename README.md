@@ -78,13 +78,13 @@
 macOS / Linux：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash
 ```
 
 Windows PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1 | iex
+irm https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.ps1 | iex
 ```
 
 这个脚本会自动：
@@ -99,21 +99,21 @@ irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-rel
 如果要安装某个 prerelease track 的最新版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --track beta
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Track beta
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.ps1))) -Track beta
 ```
 
 如果要安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.sh | bash -s -- --version v1.0.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Version <version>
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/zhuyidian/in-feishu/main/install-release.ps1))) -Version <version>
 ```
 
 ## 手动安装 release 包
