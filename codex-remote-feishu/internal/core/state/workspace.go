@@ -7,7 +7,7 @@ import (
 )
 
 func NormalizeWorkspaceKey(value string) string {
-	value = strings.TrimSpace(value)
+	value = normalizeWindowsExtendedWorkspacePath(strings.TrimSpace(value))
 	if value == "" {
 		return ""
 	}
@@ -15,7 +15,7 @@ func NormalizeWorkspaceKey(value string) string {
 	if normalized == "." {
 		return ""
 	}
-	return filepath.ToSlash(normalized)
+	return normalizeWindowsExtendedWorkspacePath(filepath.ToSlash(normalized))
 }
 
 func ResolveWorkspaceKey(values ...string) string {
@@ -28,7 +28,7 @@ func ResolveWorkspaceKey(values ...string) string {
 }
 
 func ResolveWorkspaceRootOnHost(value string) (string, error) {
-	absolute, err := filepath.Abs(strings.TrimSpace(value))
+	absolute, err := filepath.Abs(normalizeWindowsExtendedWorkspacePath(strings.TrimSpace(value)))
 	if err != nil {
 		return "", err
 	}
@@ -37,6 +37,18 @@ func ResolveWorkspaceRootOnHost(value string) (string, error) {
 		normalized = NormalizeWorkspaceKey(resolved)
 	}
 	return normalized, nil
+}
+
+func normalizeWindowsExtendedWorkspacePath(value string) string {
+	slashValue := strings.ReplaceAll(value, "\\", "/")
+	switch {
+	case strings.HasPrefix(slashValue, "//?/UNC/"):
+		return "//" + strings.TrimPrefix(slashValue, "//?/UNC/")
+	case strings.HasPrefix(slashValue, "//?/"):
+		return strings.TrimPrefix(slashValue, "//?/")
+	default:
+		return value
+	}
 }
 
 func WorkspaceShortName(value string) string {

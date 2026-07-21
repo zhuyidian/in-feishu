@@ -185,9 +185,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}
 
-	workDir := strings.TrimSpace(firstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	workDir := state.ResolveWorkspaceKey(command.WorkspaceKey, command.ThreadCWD)
 	if workDir == "" {
-		workDir = strings.TrimSpace(cfg.Paths.StateDir)
+		workDir = state.NormalizeWorkspaceKey(cfg.Paths.StateDir)
 	}
 
 	pid, err := a.startHeadless(relayruntime.HeadlessLaunchOptions{

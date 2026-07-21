@@ -19,6 +19,31 @@ func TestResolveWorkspaceKey(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorkspaceKeyStripsWindowsExtendedPathPrefix(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "backslash device prefix",
+			input: `\\?\E:\project\study\V7.0-Study-HeiBan`,
+			want:  "E:/project/study/V7.0-Study-HeiBan",
+		},
+		{
+			name:  "slash device prefix",
+			input: "//?/E:/project/study/V7.0-Study-HeiBan",
+			want:  "E:/project/study/V7.0-Study-HeiBan",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := NormalizeWorkspaceKey(test.input); got != test.want {
+				t.Fatalf("NormalizeWorkspaceKey(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
 func TestWorkspaceShortName(t *testing.T) {
 	if got := WorkspaceShortName(testutil.WorkspacePath("data", "dl", "work", "..", "droid") + "/"); got != "droid" {
 		t.Fatalf("WorkspaceShortName() = %q, want %q", got, "droid")

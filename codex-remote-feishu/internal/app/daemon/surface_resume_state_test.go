@@ -75,6 +75,45 @@ func TestSurfaceResumeStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSurfaceResumeStoreNormalizesWindowsExtendedPaths(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load empty store: %v", err)
+	}
+	if err := store.Put(surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		ProductMode:        "normal",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadCWD:    `\\?\E:\project\study\V7.0-Study-HeiBan`,
+		ResumeWorkspaceKey: `\\?\E:\project\study\V7.0-Study-HeiBan`,
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	}); err != nil {
+		t.Fatalf("put resume entry: %v", err)
+	}
+
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected stored resume entry")
+	}
+	const wantWorkspace = "E:/project/study/V7.0-Study-HeiBan"
+	if entry.ResumeThreadCWD != wantWorkspace || entry.ResumeWorkspaceKey != wantWorkspace {
+		t.Fatalf("expected normalized Windows workspace paths, got %#v", entry)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read persisted state: %v", err)
+	}
+	if strings.Contains(string(raw), "//?/") {
+		t.Fatalf("expected persisted resume state without Windows device prefix, got %s", raw)
+	}
+}
+
 func TestSurfaceResumeStoreDedupesSplitFeishuP2PSurfacesOnPut(t *testing.T) {
 	t.Parallel()
 

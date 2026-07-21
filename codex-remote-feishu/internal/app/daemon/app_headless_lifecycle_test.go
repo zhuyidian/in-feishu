@@ -87,6 +87,35 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	}
 }
 
+func TestDaemonNormalizesWindowsExtendedPathBeforeHeadlessLaunch(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths:      relayruntime.Paths{StateDir: t.TempDir()},
+	})
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4321, nil
+	}
+
+	app.startManagedHeadless(control.DaemonCommand{
+		Kind:             control.DaemonCommandStartHeadless,
+		SurfaceSessionID: "surface-1",
+		InstanceID:       "inst-1",
+		WorkspaceKey:     `\\?\E:\project\study\V7.0-Study-HeiBan`,
+		ThreadCWD:        `\\?\E:\project\study\V7.0-Study-HeiBan`,
+		Backend:          agentproto.BackendCodex,
+	})
+
+	const wantWorkDir = "E:/project/study/V7.0-Study-HeiBan"
+	if captured.WorkDir != wantWorkDir {
+		t.Fatalf("headless workdir = %q, want %q", captured.WorkDir, wantWorkDir)
+	}
+}
+
 func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-05-12`
+> Updated: `2026-07-21`
 > Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影：`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现把工作会话主链显式收口到 `/new`、`/list`、`/use`、`/detach`，把 `常用工具` 收口到 `/history`；`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -133,7 +133,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `ProductMode` / `Backend` 当前已经进入 daemon 级 `surface resume state`：
    1. 进程内已有 surface 会保留它。
    2. daemon 重启后，startup 会先从 `surface resume state` materialize latent surface，并恢复之前的 `ProductMode` / `Backend`。
-   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / instance / thread / workspace / route，还会记录 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它已经是唯一持久化恢复源，但不再持久化或恢复 `PlanMode`。其中 `ResumeWorkspaceKey` 明确表示稳定 workspace root，`ResumeThreadCWD` 明确表示最近活跃 cwd；headless 恢复、workspace 分组和 auto-resume 只允许前者承担 workspace 身份，后者只保留展示 / 线程上下文语义。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 带着非空 `ClaudeProfileID`，load/save canonicalization 会反向把 headless backend 纠正回 `claude`，避免把 Claude exact-thread 恢复目标误投到 Codex 路由；若旧 entry 误把 `pending fresh workspace` 写成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=\"\"`，load 时会自动迁回 workspace-owned `new_thread_ready` 语义。
+   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / instance / thread / workspace / route，还会记录 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它已经是唯一持久化恢复源，但不再持久化或恢复 `PlanMode`。其中 `ResumeWorkspaceKey` 明确表示稳定 workspace root，`ResumeThreadCWD` 明确表示最近活跃 cwd；headless 恢复、workspace 分组和 auto-resume 只允许前者承担 workspace 身份，后者只保留展示 / 线程上下文语义。所有 workspace key / cwd 在持久化、instance hello 和 managed headless launch 边界都会统一规范化；Windows 的 `\\?\` 扩展路径前缀必须剥离并存成普通盘符路径，不能把 `//?/E:/...` 继续传给 Codex 执行器。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 带着非空 `ClaudeProfileID`，load/save canonicalization 会反向把 headless backend 纠正回 `claude`，避免把 Claude exact-thread 恢复目标误投到 Codex 路由；若旧 entry 误把 `pending fresh workspace` 写成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=\"\"`，load 时会自动迁回 workspace-owned `new_thread_ready` 语义。
    4. headless surface（当前 persisted token 仍是 `ProductMode=normal`）随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
       2. 只允许消费同 backend 的 visible instance / workspace；不会再把 `codex` 的 headless resume target 恢复到 `claude`，反之亦然。managed headless 的复用候选也会先按 backend 过滤，attach / resume 路径若发现 thread view 与目标实例 backend 不一致，会直接拒绝这次恢复绑定，而不是把错配状态继续写回 surface resume。
