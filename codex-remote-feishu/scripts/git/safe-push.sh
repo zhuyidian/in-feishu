@@ -138,30 +138,42 @@ fi
 
 remote_ref="refs/remotes/${REMOTE}/${BRANCH}"
 
-printf '[4/8] fetch %s %s\n' "${REMOTE}" "${BRANCH}"
-git fetch "${REMOTE}" "${BRANCH}"
+remote_branch_exists=0
+remote_heads="$(git ls-remote --heads "${REMOTE}" "refs/heads/${BRANCH}")"
+if [[ -n "${remote_heads}" ]]; then
+  printf '[4/8] fetch %s %s\n' "${REMOTE}" "${BRANCH}"
+  git fetch "${REMOTE}" "${BRANCH}"
 
-if ! git show-ref --verify --quiet "${remote_ref}"; then
-  echo "remote branch not found after fetch: ${remote_ref}" >&2
-  exit 1
+  if ! git show-ref --verify --quiet "${remote_ref}"; then
+    echo "remote branch not found after fetch: ${remote_ref}" >&2
+    exit 1
+  fi
+  remote_branch_exists=1
+else
+  printf '[4/8] remote branch %s/%s does not exist; create on push\n' "${REMOTE}" "${BRANCH}"
 fi
 
-counts="$(git rev-list --left-right --count "HEAD...${remote_ref}")"
-read -r ahead behind <<< "${counts}"
 rebase_happened=0
 
-if [[ "${behind}" != "0" ]]; then
-  printf '[5/8] rebase onto %s/%s (ahead=%s behind=%s)\n' "${REMOTE}" "${BRANCH}" "${ahead}" "${behind}"
-  if ! git rebase "${remote_ref}"; then
-    cat >&2 <<'EOF'
+if [[ "${remote_branch_exists}" == "1" ]]; then
+  counts="$(git rev-list --left-right --count "HEAD...${remote_ref}")"
+  read -r ahead behind <<< "${counts}"
+
+  if [[ "${behind}" != "0" ]]; then
+    printf '[5/8] rebase onto %s/%s (ahead=%s behind=%s)\n' "${REMOTE}" "${BRANCH}" "${ahead}" "${behind}"
+    if ! git rebase "${remote_ref}"; then
+      cat >&2 <<'EOF'
 rebase failed and was left in place for manual resolution.
 resolve conflicts, continue or abort the rebase yourself, then rerun tests and push manually.
 EOF
-    exit 2
+      exit 2
+    fi
+    rebase_happened=1
+  else
+    printf '[5/8] remote is not ahead (ahead=%s behind=%s); skip rebase\n' "${ahead}" "${behind}"
   fi
-  rebase_happened=1
 else
-  printf '[5/8] remote is not ahead (ahead=%s behind=%s); skip rebase\n' "${ahead}" "${behind}"
+  printf '[5/8] remote branch does not exist; skip rebase\n'
 fi
 
 if [[ "${NO_TEST}" == "1" ]]; then

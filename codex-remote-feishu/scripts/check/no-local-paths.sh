@@ -53,10 +53,18 @@ if command -v rg >/dev/null 2>&1; then
   for pattern in "${patterns[@]}"; do
     args+=(-e "${pattern}")
   done
-  raw_matches="$(rg -n "${args[@]}" -- "${files[@]}" || true)"
+  raw_matches="$(
+    printf '%s\0' "${files[@]}" |
+      xargs -0 -r -n 200 rg -n "${args[@]}" -- ||
+      true
+  )"
 else
   combined_pattern="$(IFS='|'; printf '%s' "${patterns[*]}")"
-  raw_matches="$(grep -nE "${combined_pattern}" "${files[@]}" || true)"
+  raw_matches="$(
+    printf '%s\0' "${files[@]}" |
+      xargs -0 -r -n 200 grep -nE "${combined_pattern}" -- ||
+      true
+  )"
 fi
 
 filtered_matches="$(printf '%s\n' "${raw_matches}" | grep -vE "${allowlisted_demo_pattern}" || true)"
