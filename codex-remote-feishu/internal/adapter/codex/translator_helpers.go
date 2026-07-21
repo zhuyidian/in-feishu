@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func chooseAny(values ...any) any {
@@ -149,6 +150,33 @@ func choose(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeThreadCWD(value string) string {
+	return state.NormalizeWorkspaceKey(value)
+}
+
+func firstNormalizedThreadCWD(values ...string) string {
+	for _, value := range values {
+		if normalized := normalizeThreadCWD(value); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
+}
+
+func (t *Translator) rememberThreadCWD(threadID, cwd string) string {
+	threadID = strings.TrimSpace(threadID)
+	cwd = normalizeThreadCWD(cwd)
+	if threadID != "" && cwd != "" {
+		t.knownThreadCWD[threadID] = cwd
+	}
+	return cwd
+}
+
+func (t *Translator) resolveThreadCWD(threadID string, candidates ...string) string {
+	threadID = strings.TrimSpace(threadID)
+	return firstNormalizedThreadCWD(append(candidates, t.knownThreadCWD[threadID])...)
 }
 
 func normalizeItemKind(raw string) string {

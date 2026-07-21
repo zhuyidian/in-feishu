@@ -522,9 +522,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		thread := s.ensureThread(inst, event.ThreadID)
 		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 		thread.Loaded = true
-		if event.CWD != "" {
-			thread.CWD = event.CWD
-		}
+		assignNormalizedThreadCWD(thread, event.CWD)
 		s.touchThread(thread)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
 	case agentproto.EventConfigObserved:
@@ -552,9 +550,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 				thread.LastAssistantMessage = previewOfText(event.Preview)
 			}
 		}
-		if event.CWD != "" {
-			thread.CWD = event.CWD
-		}
+		assignNormalizedThreadCWD(thread, event.CWD)
 		if event.Model != "" {
 			thread.ExplicitModel = event.Model
 		}
@@ -619,9 +615,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 					current.LastAssistantMessage = previewOfText(thread.Preview)
 				}
 			}
-			if thread.CWD != "" {
-				current.CWD = thread.CWD
-			}
+			assignNormalizedThreadCWD(current, thread.CWD)
 			if thread.Model != "" {
 				current.ExplicitModel = thread.Model
 			}
@@ -659,9 +653,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			inst.ObservedFocusedThreadID = event.ThreadID
 			thread := s.ensureThread(inst, event.ThreadID)
 			thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
-			if event.CWD != "" {
-				thread.CWD = event.CWD
-			}
+			assignNormalizedThreadCWD(thread, event.CWD)
 			s.touchThread(thread)
 		}
 		events := append(preface, s.pauseForLocal(instanceID)...)
@@ -707,9 +699,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 				thread := s.ensureThread(inst, event.ThreadID)
 				thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 				thread.Loaded = true
-				if event.CWD != "" {
-					thread.CWD = event.CWD
-				}
+				assignNormalizedThreadCWD(thread, event.CWD)
 				s.touchThread(thread)
 			}
 			events := append(preface, s.pauseForLocal(instanceID)...)

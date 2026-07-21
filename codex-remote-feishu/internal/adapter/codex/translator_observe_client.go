@@ -41,9 +41,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)
 		t.currentThreadID = threadID
-		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
-		}
+		cwd = t.rememberThreadCWD(threadID, cwd)
 		t.debugf("observe client thread/resume: thread=%s cwd=%s", threadID, cwd)
 		return Result{Events: []agentproto.Event{{
 			Kind:        agentproto.EventThreadFocused,
@@ -78,9 +76,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			}}}, nil
 		}
 		t.currentThreadID = threadID
-		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
-		}
+		cwd = t.rememberThreadCWD(threadID, cwd)
 		template := normalizeTurnStartTemplate(params)
 		t.latestTurnStartTemplate = template
 		if threadID != "" {

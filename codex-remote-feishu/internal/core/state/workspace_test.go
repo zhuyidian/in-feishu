@@ -35,6 +35,11 @@ func TestNormalizeWorkspaceKeyStripsWindowsExtendedPathPrefix(t *testing.T) {
 			input: "//?/E:/project/study/V7.0-Study-HeiBan",
 			want:  "E:/project/study/V7.0-Study-HeiBan",
 		},
+		{
+			name:  "mixed slash and backslash device prefix",
+			input: `//?/E:\project\study\V7.0-Study-HeiBan`,
+			want:  "E:/project/study/V7.0-Study-HeiBan",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := NormalizeWorkspaceKey(test.input); got != test.want {

@@ -83,9 +83,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}, nil
 			}
 			t.currentThreadID = pending.ThreadID
-			if pending.CWD != "" {
-				t.knownThreadCWD[pending.ThreadID] = pending.CWD
-			}
+			t.rememberThreadCWD(pending.ThreadID, pending.CWD)
 			t.suppressedThreadStarted[pending.ThreadID] = true
 			t.debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
 			return Result{
@@ -158,9 +156,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 			}
 			t.currentThreadID = threadID
-			if pending.Command.Target.CWD != "" {
-				t.knownThreadCWD[threadID] = pending.Command.Target.CWD
-			}
+			t.rememberThreadCWD(threadID, pending.Command.Target.CWD)
 			followup, followupID, err := t.directTurnStart(threadID, pending.Command, true)
 			if err != nil {
 				return Result{}, err
@@ -208,9 +204,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}}}, nil
 			}
 			t.currentThreadID = pending.ThreadID
-			if pending.Command.Target.CWD != "" {
-				t.knownThreadCWD[pending.ThreadID] = pending.Command.Target.CWD
-			}
+			t.rememberThreadCWD(pending.ThreadID, pending.Command.Target.CWD)
 			switch pending.Command.Kind {
 			case agentproto.CommandThreadCompactStart:
 				followup, followupID, err := t.directCompactStart(pending.Command)

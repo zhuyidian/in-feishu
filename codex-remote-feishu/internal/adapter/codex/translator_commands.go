@@ -39,7 +39,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"method": "thread/resume",
 				"params": map[string]any{
 					"threadId": threadID,
-					"cwd":      choose(command.Target.CWD, t.knownThreadCWD[threadID]),
+					"cwd":      t.resolveThreadCWD(threadID, command.Target.CWD),
 				},
 			}
 			bytes, err := json.Marshal(payload)
@@ -275,7 +275,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 			"method": "thread/resume",
 			"params": map[string]any{
 				"threadId": command.Target.ThreadID,
-				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
+				"cwd":      t.resolveThreadCWD(command.Target.ThreadID, command.Target.CWD),
 			},
 		}
 		bytes, err := json.Marshal(payload)
@@ -343,7 +343,7 @@ func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.Pro
 	if len(params) == 0 {
 		params = map[string]any{}
 	}
-	params["cwd"] = choose(cwd, lookupStringFromAny(params["cwd"]))
+	params["cwd"] = firstNormalizedThreadCWD(cwd, lookupStringFromAny(params["cwd"]))
 	setDefault(params, "model", nil)
 	setDefault(params, "modelProvider", nil)
 	setDefault(params, "config", map[string]any{})
@@ -364,7 +364,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	template := t.selectTurnTemplate(threadID, newThread)
 	template["threadId"] = threadID
 	template["input"] = t.buildInputs(command.Prompt.Inputs)
-	template["cwd"] = choose(command.Target.CWD, choose(lookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID]))
+	template["cwd"] = t.resolveThreadCWD(threadID, command.Target.CWD, lookupStringFromAny(template["cwd"]))
 	setDefault(template, "approvalPolicy", nil)
 	setDefault(template, "sandboxPolicy", nil)
 	setDefault(template, "model", nil)

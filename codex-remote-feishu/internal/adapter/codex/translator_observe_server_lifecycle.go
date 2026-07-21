@@ -13,6 +13,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	if cwd == "" {
 		cwd = lookupString(message, "params", "cwd")
 	}
+	cwd = t.rememberThreadCWD(threadID, cwd)
 	name := threadRecord.Name
 	runtimeStatus := agentproto.CloneThreadRuntimeStatus(threadRecord.RuntimeStatus)
 	status := ""
@@ -24,16 +25,10 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	if t.suppressedThreadStarted[threadID] {
 		delete(t.suppressedThreadStarted, threadID)
 		t.currentThreadID = threadID
-		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
-		}
 		t.debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
 		return Result{Suppress: true}
 	}
 	if t.internalThreadIDs[threadID] {
-		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
-		}
 		event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
 		event.TrafficClass = agentproto.TrafficClassInternalHelper
 		event.Initiator = agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
@@ -45,9 +40,6 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	if t.pendingLocalNewThreadTurn && threadID != "" {
 		t.pendingLocalTurnByThread[threadID] = true
 		t.pendingLocalNewThreadTurn = false
-	}
-	if cwd != "" {
-		t.knownThreadCWD[threadID] = cwd
 	}
 	return Result{Events: []agentproto.Event{event}}
 }

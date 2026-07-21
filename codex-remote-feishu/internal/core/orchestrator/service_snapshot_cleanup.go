@@ -87,6 +87,15 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 	}
 }
 
+func assignNormalizedThreadCWD(thread *state.ThreadRecord, cwd string) {
+	if thread == nil {
+		return
+	}
+	if normalized := state.NormalizeWorkspaceKey(cwd); normalized != "" {
+		thread.CWD = normalized
+	}
+}
+
 func (s *Service) updateInstanceCWDDefaults(inst *state.InstanceRecord, cwd string, apply func(*state.ModelConfigRecord)) {
 	cwd = state.NormalizeWorkspaceKey(cwd)
 	if inst == nil || cwd == "" || apply == nil {
