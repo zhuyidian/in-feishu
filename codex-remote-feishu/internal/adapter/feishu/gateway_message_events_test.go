@@ -274,7 +274,7 @@ func TestParseMessageEventBuildsMixedInputsForPost(t *testing.T) {
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-post-1"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				MessageType: stringRef("post"),
 				Mentions:    botMention(),
 				Content:     stringRef(`{"title":"","content":[[{"tag":"img","image_key":"img-post-1"}],[{"tag":"text","text":"这是图文混合消息"}]]}`),
@@ -472,7 +472,7 @@ func TestParseMessageEventIgnoresQuoteFetchFailure(t *testing.T) {
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-reply-3"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				MessageType: stringRef("text"),
 				ParentId:    stringRef("om-parent-err"),
 				Content:     stringRef(`{"text":"只保留当前消息"}`),
@@ -510,7 +510,7 @@ func TestParseMessageEventHandlesMergeForwardMessage(t *testing.T) {
 			Message: &larkim.EventMessage{
 				MessageId:   stringRef("om-forward-1"),
 				ChatId:      stringRef("oc_chat"),
-				ChatType:    stringRef("group"),
+				ChatType:    stringRef("p2p"),
 				ThreadId:    stringRef("omt-thread-1"),
 				MessageType: stringRef("merge_forward"),
 				RootId:      stringRef("om-root-1"),
@@ -643,7 +643,7 @@ func TestParseMessageEventExpandsMergeForwardFromFetchedChildren(t *testing.T) {
 }
 
 func TestParseMessageEventQuotesMergeForwardMessage(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
 		if messageID != "om-parent-forward-1" {
 			t.Fatalf("unexpected parent merge forward lookup: %s", messageID)
@@ -652,6 +652,7 @@ func TestParseMessageEventQuotesMergeForwardMessage(t *testing.T) {
 			MessageID:   "om-parent-forward-1",
 			MessageType: "merge_forward",
 			Content:     `{"title":"讨论记录","items":[{"name":"张三","text":"先看日志"},{"name":"李四","text":"确认 message_type"}]}`,
+			SenderID:    "ou_bot",
 		}, nil
 	}
 	event := &larkim.P2MessageReceiveV1{
@@ -693,7 +694,7 @@ func TestParseMessageEventQuotesMergeForwardMessage(t *testing.T) {
 }
 
 func TestParseMessageEventQuotesFetchedMergeForwardMessageWithSpeakerLabels(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
 		if messageID != "om-parent-forward-2" {
 			t.Fatalf("unexpected parent merge forward lookup: %s", messageID)
@@ -702,6 +703,7 @@ func TestParseMessageEventQuotesFetchedMergeForwardMessageWithSpeakerLabels(t *t
 			MessageID:   "om-parent-forward-2",
 			MessageType: "merge_forward",
 			Content:     "Merged and Forwarded Message",
+			SenderID:    "ou_bot",
 			Children: []*gatewayMessage{
 				{MessageID: "om-forward-child-4", MessageType: "text", SenderID: "ou_user_a", SenderType: "user", Content: `{"text":"先看 inbound 事件"}`},
 				{MessageID: "om-forward-child-5", MessageType: "text", SenderID: "ou_user_b", SenderType: "user", Content: `{"text":"然后核对 fetch 分支"}`},
@@ -750,7 +752,7 @@ func TestParseMessageEventQuotesFetchedMergeForwardMessageWithSpeakerLabels(t *t
 }
 
 func TestParseMessageEventQuotesInteractiveFinalMessage(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", AppID: "cli_bot"})
 	payload := renderOperationCard(Operation{
 		Kind:         OperationSendCard,
 		CardTitle:    "✅ 最后答复：先看日志",
@@ -772,6 +774,7 @@ func TestParseMessageEventQuotesInteractiveFinalMessage(t *testing.T) {
 			MessageID:   "om-final-card-1",
 			MessageType: "interactive",
 			Content:     string(rawPayload),
+			SenderID:    "cli_bot",
 		}, nil
 	}
 	event := &larkim.P2MessageReceiveV1{

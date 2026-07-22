@@ -34,6 +34,7 @@ func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 		GatewayID:                     g.config.GatewayID,
 		BotOpenID:                     g.botOpenID(),
 		LookupSurfaceMessage:          g.lookupSurfaceMessage,
+		IsReplyTargetBot:              g.isReplyTargetBot,
 		ParseTextActionWithoutCatalog: control.ParseFeishuTextActionWithoutCatalog,
 		QuotedInputs:                  g.quotedInputs,
 		ParsePostInputs:               g.parsePostInputs,

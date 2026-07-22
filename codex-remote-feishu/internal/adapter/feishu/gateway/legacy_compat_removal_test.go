@@ -42,7 +42,7 @@ func TestPlanInboundMessageEventRemovedLegacyCompatQueuesPlainTextMessage(t *tes
 		},
 	}
 
-	planned, ok, err := PlanInboundMessageEvent(env, event)
+	planned, ok, err := PlanInboundMessageEvent(t.Context(), env, event)
 	if err != nil {
 		t.Fatalf("PlanInboundMessageEvent returned error: %v", err)
 	}

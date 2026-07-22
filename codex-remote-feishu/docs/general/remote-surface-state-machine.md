@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-07-21`
+> Updated: `2026-07-22`
 > Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影：`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现把工作会话主链显式收口到 `/new`、`/list`、`/use`、`/detach`，把 `常用工具` 收口到 `/history`；`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -360,16 +360,17 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 补充说明：
 
-1. 当前还存在一个**可叠加**的 steering overlay：
+1. Feishu 群聊消息进入 remote surface 前必须先满足入口资格：显式 `@` 当前机器人，或在无机器人提及的 reply 场景下，通过 `im.v1.message.get` 验证被回复消息的 sender id 等于当前 `BotOpenID` 或 Feishu app id。人对人回复不会创建 action、queue 或 steering item；读取被回复消息失败、消息已删除或 sender 不匹配时一律 fail closed。
+2. 当前还存在一个**可叠加**的 steering overlay：
    1. 某个 queued item 被点赞升级后，会离开 `QueuedQueueItemIDs`
    2. 或者用户 reply 当前 processing 的 source message，且 reply 内容属于当前 v1 支持的文本 / 本地图片输入时，会创建一个临时 steering item；独立文件 reply 当前不会走 steering，而是保留为 staged file
    3. 该 item 进入 `QueueItemStatus=steering`
    4. 相关命令记录在 `pendingSteers`
-2. 这个 overlay 不占用 `ActiveQueueItemID`，所以可以与 `E3 Running` 并存。
-3. steering ack 成功后，item 进入 `steered`；失败时恢复回普通语义：
-   1. 文本 / 图文 reply 恢复为普通 queued item
-   2. 独立图片 reply 恢复为 `ImageStaged`
-4. `E4 PausedForLocal` 当前有三条来源分支：
+3. 这个 overlay 不占用 `ActiveQueueItemID`，所以可以与 `E3 Running` 并存。
+4. steering ack 成功后，item 进入 `steered`；失败时恢复回普通语义：
+	1. 文本 / 图文 reply 恢复为普通 queued item
+	2. 独立图片 reply 恢复为 `ImageStaged`
+5. `E4 PausedForLocal` 当前有三条来源分支：
    1. local-activity 分支由 `pauseForLocal(...)` 写入 `pausedUntil`，因此仍有 watchdog，并且后续可能进入 `E5 HandoffWait`。
    2. standalone Codex 升级分支由 daemon 通过 `PauseSurfaceDispatch(...)` 显式写入；这条路径会主动清掉 `pausedUntil/handoffUntil`，因此不会被 `Tick()` watchdog 自动恢复，只会在升级事务显式 `ResumeSurfaceDispatch(...)` 时继续派发。
    3. current-thread patch 事务同样由 daemon 通过 `PauseSurfaceDispatch(...)` 显式写入；它会暂停同一 instance 上所有 attached surface 的 dispatch，直到 patch apply / rollback 成功或失败收口后再显式 `ResumeSurfaceDispatch(...)`。

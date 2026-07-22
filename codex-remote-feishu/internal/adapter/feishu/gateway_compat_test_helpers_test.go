@@ -99,7 +99,7 @@ func (g *LiveGateway) handleInboundMessageReactionCreatedEvent(ctx context.Conte
 }
 
 func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) (plannedInboundMessage, bool, error) {
-	plan, ok, err := gatewaypkg.PlanInboundMessageEvent(g.inboundEnv(), event)
+	plan, ok, err := gatewaypkg.PlanInboundMessageEvent(context.Background(), g.inboundEnv(), event)
 	if err != nil || !ok {
 		return plannedInboundMessage{}, ok, err
 	}

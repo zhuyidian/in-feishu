@@ -392,7 +392,7 @@ func (l *SurfaceInboundLane) MarkActionDuplicate(action control.Action) bool {
 }
 
 func HandleInboundMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1, lane *SurfaceInboundLane, dispatch ActionDispatcher) error {
-	plan, ok, err := PlanInboundMessageEvent(env, event)
+	plan, ok, err := PlanInboundMessageEvent(ctx, env, event)
 	if err != nil || !ok {
 		return err
 	}
@@ -437,7 +437,7 @@ func HandleInboundMessageReactionCreatedEvent(ctx context.Context, env InboundEn
 	return dispatch(ctx, action)
 }
 
-func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (PlannedInboundMessage, bool, error) {
+func PlanInboundMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1) (PlannedInboundMessage, bool, error) {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return PlannedInboundMessage{}, false, nil
 	}
@@ -460,7 +460,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 		MessageID:        messageID,
 		Inbound:          cloneInboundMeta(inbound),
 	}
-	if replyTargetMessageID := referencedMessageID(message); replyTargetMessageID != "" {
+	replyTargetMessageID := referencedMessageID(message)
+	if replyTargetMessageID != "" {
 		baseAction.TargetMessageID = replyTargetMessageID
 	}
 
@@ -471,7 +472,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
 			return PlannedInboundMessage{}, false, err
 		}
-		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID, referencedMessageID(message)) {
+		if !shouldHandleInboundGroupMessage(ctx, chatType, messageType, content, message.Mentions, env.BotOpenID, replyTargetMessageID, env.IsReplyTargetBot) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
 			return PlannedInboundMessage{}, false, nil
 		}
@@ -503,7 +504,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "post":
-		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID, referencedMessageID(message)) {
+		if !shouldHandleInboundGroupMessage(ctx, chatType, messageType, content, message.Mentions, env.BotOpenID, replyTargetMessageID, env.IsReplyTargetBot) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
 			return PlannedInboundMessage{}, false, nil
 		}
@@ -528,7 +529,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "image":
-		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID, referencedMessageID(message)) {
+		if !shouldHandleInboundGroupMessage(ctx, chatType, messageType, content, message.Mentions, env.BotOpenID, replyTargetMessageID, env.IsReplyTargetBot) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
 			return PlannedInboundMessage{}, false, nil
 		}
@@ -554,7 +555,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "file":
-		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID, referencedMessageID(message)) {
+		if !shouldHandleInboundGroupMessage(ctx, chatType, messageType, content, message.Mentions, env.BotOpenID, replyTargetMessageID, env.IsReplyTargetBot) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
 			return PlannedInboundMessage{}, false, nil
 		}
@@ -581,7 +582,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			},
 		}, true, nil
 	case "merge_forward":
-		if !shouldHandleInboundGroupMessage(chatType, messageType, content, message.Mentions, env.BotOpenID, referencedMessageID(message)) {
+		if !shouldHandleInboundGroupMessage(ctx, chatType, messageType, content, message.Mentions, env.BotOpenID, replyTargetMessageID, env.IsReplyTargetBot) {
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "group_message_without_mention")
 			return PlannedInboundMessage{}, false, nil
 		}

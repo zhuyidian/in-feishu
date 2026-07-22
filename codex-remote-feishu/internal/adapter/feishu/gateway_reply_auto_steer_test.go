@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseMessageEventReplyTextCarriesReplyTargetAndSteerInputs(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
 		if messageID != "om-parent-1" {
 			t.Fatalf("unexpected parent message lookup: %s", messageID)
@@ -20,6 +20,7 @@ func TestParseMessageEventReplyTextCarriesReplyTargetAndSteerInputs(t *testing.T
 			MessageID:   messageID,
 			MessageType: "text",
 			Content:     `{"text":"原始消息"}`,
+			SenderID:    "ou_bot",
 		}, nil
 	}
 	event := &larkim.P2MessageReceiveV1{
@@ -56,8 +57,39 @@ func TestParseMessageEventReplyTextCarriesReplyTargetAndSteerInputs(t *testing.T
 	}
 }
 
+func TestParseMessageEventIgnoresGroupReplyToHumanMessage(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
+	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
+		if messageID != "om-human-parent-1" {
+			t.Fatalf("unexpected parent message lookup: %s", messageID)
+		}
+		return &gatewayMessage{MessageID: messageID, MessageType: "text", SenderID: "ou_human"}, nil
+	}
+	event := testTextMessageEvent("evt-human-reply-1", "om-human-reply-1", "@_user_1 ok")
+	event.Event.Message.ChatType = stringRef("group")
+	event.Event.Message.ParentId = stringRef("om-human-parent-1")
+	event.Event.Message.Mentions = []*larkim.MentionEvent{{
+		Key: stringRef("@_user_1"),
+		Id:  &larkim.UserId{OpenId: stringRef("ou_human")},
+	}}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if ok || action.Kind != "" {
+		t.Fatalf("expected human reply to be ignored, got %#v", action)
+	}
+}
+
 func TestParseMessageEventReplyImageCarriesReplyTargetAndSteerInputs(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
+	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
+		if messageID != "om-parent-image-1" {
+			t.Fatalf("unexpected parent message lookup: %s", messageID)
+		}
+		return &gatewayMessage{MessageID: messageID, MessageType: "text", SenderID: "ou_bot"}, nil
+	}
 	gateway.downloadImageFn = func(_ context.Context, messageID, imageKey string) (string, string, error) {
 		if messageID != "om-reply-image-1" || imageKey != "img-1" {
 			t.Fatalf("unexpected image download request: message=%s image=%s", messageID, imageKey)
@@ -96,7 +128,7 @@ func TestParseMessageEventReplyImageCarriesReplyTargetAndSteerInputs(t *testing.
 }
 
 func TestParseMessageEventReplyMergeForwardDoesNotExposeSteerInputs(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1", BotOpenID: "ou_bot"})
 	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
 		switch messageID {
 		case "om-forward-1":
@@ -110,6 +142,7 @@ func TestParseMessageEventReplyMergeForwardDoesNotExposeSteerInputs(t *testing.T
 				MessageID:   messageID,
 				MessageType: "text",
 				Content:     `{"text":"原始消息"}`,
+				SenderID:    "ou_bot",
 			}, nil
 		default:
 			t.Fatalf("unexpected message lookup: %s", messageID)

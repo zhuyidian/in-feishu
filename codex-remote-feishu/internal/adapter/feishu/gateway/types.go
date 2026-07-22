@@ -18,6 +18,7 @@ type InboundEnv struct {
 	GatewayID                        string
 	BotOpenID                        string
 	LookupSurfaceMessage             func(messageID string) string
+	IsReplyTargetBot                 func(context.Context, string) bool
 	ParseTextActionWithoutCatalog    func(text string) (control.Action, bool)
 	QuotedInputs                     func(context.Context, *larkim.EventMessage) []agentproto.Input
 	ParsePostInputs                  func(context.Context, string, string) ([]agentproto.Input, string, error)

@@ -36,6 +36,33 @@ func (g *LiveGateway) quotedInputs(ctx context.Context, message *larkim.EventMes
 	return g.inputsFromReferencedMessage(ctx, referenced)
 }
 
+func (g *LiveGateway) isReplyTargetBot(ctx context.Context, messageID string) bool {
+	if g == nil || g.fetchMessageFn == nil {
+		return false
+	}
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return false
+	}
+	botOpenID := g.botOpenID()
+	appID := strings.TrimSpace(g.config.AppID)
+	if botOpenID == "" && appID == "" {
+		return false
+	}
+	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	defer cancel()
+	referenced, err := g.fetchMessageFn(ctx, messageID)
+	if err != nil {
+		log.Printf("feishu reply target lookup ignored: message=%s err=%v", messageID, err)
+		return false
+	}
+	if referenced == nil || referenced.Deleted {
+		return false
+	}
+	senderID := strings.TrimSpace(referenced.SenderID)
+	return senderID != "" && (senderID == botOpenID || senderID == appID)
+}
+
 func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, referenced *gatewayMessage) []agentproto.Input {
 	if referenced == nil || referenced.Deleted {
 		return nil

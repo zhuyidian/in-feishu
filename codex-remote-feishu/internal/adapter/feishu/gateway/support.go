@@ -132,11 +132,8 @@ func normalizeFeishuTextMentions(rawText string, mentions []*larkim.MentionEvent
 	return strings.NewReplacer(pairs...).Replace(rawText)
 }
 
-func shouldHandleInboundGroupMessage(chatType, messageType, rawContent string, mentions []*larkim.MentionEvent, botOpenID, replyTargetMessageID string) bool {
+func shouldHandleInboundGroupMessage(ctx context.Context, chatType, messageType, rawContent string, mentions []*larkim.MentionEvent, botOpenID, replyTargetMessageID string, isReplyTargetBot func(context.Context, string) bool) bool {
 	if strings.ToLower(strings.TrimSpace(chatType)) != "group" {
-		return true
-	}
-	if strings.TrimSpace(replyTargetMessageID) != "" {
 		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(messageType)) {
@@ -147,16 +144,30 @@ func shouldHandleInboundGroupMessage(chatType, messageType, rawContent string, m
 		}
 		mentionedBot := leadingFeishuMentionMatchesBot(rawText, mentions, botOpenID)
 		if strings.TrimSpace(botOpenID) != "" {
-			return mentionedBot
+			if mentionedBot {
+				return true
+			}
+			break
 		}
 		commandText, ok := stripLeadingFeishuMentionKeys(strings.TrimSpace(rawText), feishuMentionKeys(mentions))
-		return ok && strings.HasPrefix(strings.TrimSpace(commandText), "/")
+		if ok && strings.HasPrefix(strings.TrimSpace(commandText), "/") {
+			return true
+		}
 	default:
 		if strings.TrimSpace(botOpenID) == "" {
-			return len(feishuMentionKeys(mentions)) != 0
+			if len(feishuMentionKeys(mentions)) != 0 {
+				return true
+			}
+			break
 		}
-		return feishuMentionMatchesBot(mentions, botOpenID)
+		if feishuMentionMatchesBot(mentions, botOpenID) {
+			return true
+		}
 	}
+	if strings.TrimSpace(replyTargetMessageID) != "" && isReplyTargetBot != nil {
+		return isReplyTargetBot(ctx, strings.TrimSpace(replyTargetMessageID))
+	}
+	return false
 }
 
 func leadingFeishuMentionMatchesBot(rawText string, mentions []*larkim.MentionEvent, botOpenID string) bool {
