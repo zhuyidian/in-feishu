@@ -101,6 +101,7 @@ E:\project\study\V5.0-Study-GKPrep-Plus\.agents\skills\gkprep-build-apk\scripts\
 
 | 版本 | 主要变化 |
 | --- | --- |
+| [v1.7.5](https://github.com/zhuyidian/in-feishu/tree/v1.7.5) | 修复 Windows 下的工作区路径与安全推送兼容性，更新升级 shim；群聊中会忽略对其他用户的回复，减少误处理。 |
 | [v1.7.4](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.4) | 本仓库开始提供可直接安装的 GitHub Release；修复根目录 release workflow、测试阻塞和群聊回复上下文处理。 |
 | [v1.7.3](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.3) | 支持引用飞书文件消息后交给 Codex 处理；增强 APK skill 在 Windows 下的直接执行稳定性。 |
 | [v1.7.2](https://github.com/zhuyidian/in-feishu/releases/tag/v1.7.2) | 工作区可暴露本地 `.agents/skills`，并支持项目内 APK 构建 skill 直接运行。 |
